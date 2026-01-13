@@ -3,6 +3,7 @@ import Login from "./pages/Login"
 import Signup from "./pages/Signup"
 import Pending from "./pages/Pending"
 import Dashboard from "./pages/Dashboard"
+import { Toaster } from "react-hot-toast"
 
 
 function App() {
@@ -18,6 +19,12 @@ function App() {
           <Route path="/dashboard" element={<Dashboard/>} />
         </Routes>
       </BrowserRouter>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+        }}
+      />
     </>
   )
 }
