@@ -40,9 +40,10 @@ export default function Login() {
 
             {/* Right Side - Login Form */}
             <div 
-                className="w-full lg:w-1/2 flex flex-col justify-center items-center 
+                className="w-screen lg:w-1/2 flex flex-col justify-center items-center 
                     bg-[url('assets/MobileLoginBg.png')]
                     bg-cover
+                    bg-center
                     lg:bg-linear-to-br from-gray-50 to-gray-100 px-8 py-12"
 
                 >
