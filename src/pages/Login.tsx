@@ -34,7 +34,7 @@ export default function Login() {
     };
 
     return (
-        <div className="w-screen h-screen flex overflow-hidden">
+        <div className="w-screen h-screen flex overflow-hidden fixed inset-0">
            
             <BackgroundLogin/>
 
@@ -44,6 +44,7 @@ export default function Login() {
                     bg-[url('assets/MobileLoginBg.png')]
                     bg-cover
                     bg-center
+                    bg-fixed
                     lg:bg-linear-to-br from-gray-50 to-gray-100 px-8 py-12"
 
                 >
