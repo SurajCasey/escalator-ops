@@ -1,2 +1,9 @@
 @import "tailwindcss";
 
+.btn-primary{
+  @apply bg-blue-300
+}
+
+@theme{
+  --color-loginbg: #2d2522;
+}
