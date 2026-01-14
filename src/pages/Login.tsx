@@ -40,7 +40,7 @@ export default function Login() {
 
             {/* Right Side - Login Form */}
             <div 
-                className="w-screen lg:w-1/2 flex flex-col justify-center items-center 
+                className="w-screen h-screen lg:w-1/2 flex flex-col justify-center items-center 
                     bg-[url('assets/MobileLoginBg.png')]
                     bg-cover
                     bg-center
