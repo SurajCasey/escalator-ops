@@ -39,10 +39,18 @@ export default function Login() {
             <BackgroundLogin/>
 
             {/* Right Side - Login Form */}
-            <div className="w-full lg:w-1/2 flex flex-col justify-center items-center bg-gradient-to-br from-gray-50 to-gray-100 px-8 py-12">
-                <div className="w-full max-w-md">
+            <div 
+                className="w-full lg:w-1/2 flex flex-col justify-center items-center 
+                    bg-[url('assets/MobileLoginBg.png')]
+                    bg-cover
+                    lg:bg-linear-to-br from-gray-50 to-gray-100 px-8 py-12"
+
+                >
+                <div 
+                    className="w-full max-w-md"
+                >
                     {/* Card Container with Shadow */}
-                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-10 border border-gray-100">
+                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-10 border border-gray-200">
                         {/* Logo and Title */}
                         <div className="mb-8 text-center">
                             <div className="flex items-center justify-center gap-3 mb-3">
