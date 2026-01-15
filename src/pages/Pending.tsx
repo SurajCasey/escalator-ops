@@ -1,9 +1,7 @@
-// import { useState } from "react"
 import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 
 const Pending = () => {
-  // const[loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout= async () => {
@@ -58,14 +56,12 @@ const Pending = () => {
 
                     <button
                       onClick={handleLogout}         
-                        // disabled={loading}
                         className="w-full bg-linear-to-r from-red-600 to-red-700 text-white py-3.5 px-4 rounded-lg 
                           font-semibold hover:from-red-700 hover:to-red-800 disabled:from-blue-300 
                           disabled:to-blue-400 disabled:cursor-not-allowed transition-all duration-200 
                           shadow-lg hover:shadow-xl transform hover:-translate-y-0.5
                           cursor-pointer mt-8"
                     >
-                        {/* {loading ? "Logging in..." : "Log In"} */}
                         Sign Out
                     </button>
               </div>
