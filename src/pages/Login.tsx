@@ -15,16 +15,49 @@ export default function Login() {
         e.preventDefault();
         setLoading(true);
         try {
-            const { error } = await supabase.auth.signInWithPassword({
+            const {data, error } = await supabase.auth.signInWithPassword({
                 email, password
             });
 
             if (error) {
                 toast.error(error.message);
-            } else {
-                toast.success("Login successful");
-                navigate("/dashboard");
+                return;
             }
+            
+            const user= data.user
+            
+            if(!user){
+                toast.error("Login failed. Please try again.")
+                return;
+            }
+
+            // Fetch profile status
+            const { data:profile, error:profileError} = await supabase
+            .from("profiles")
+            .select("status")
+            .eq("id", user.id)
+            .single();
+
+            if(profileError || !profile){
+                toast.error("Unable to verity account status.");
+                await supabase.auth.signOut();
+                return;
+            }
+
+            // Redirect based on status
+            if(profile?.status === "PENDING"){
+                toast.success("Your account is pending admin approval.")
+                navigate("/pending", {replace: true});
+                return;
+            }
+            if(profile?.status === "DISABLED"){
+                toast("Your account has been disabled.");
+                await supabase.auth.signOut();
+                return;
+            }
+            // Active account
+            toast.success("Login successful");
+            navigate("/dashboard");
         } catch (error) {
             toast.error("An unexpected error occurred. Please try again")
             console.error("login error:", error)
@@ -46,7 +79,6 @@ export default function Login() {
                     bg-center
                     bg-fixed
                     lg:bg-linear-to-br from-gray-50 to-gray-100 px-8 py-12"
-
                 >
                 <div 
                     className="w-full max-w-md"
@@ -55,7 +87,7 @@ export default function Login() {
                     <div className="bg-white rounded-2xl shadow-2xl px-10 py-10 border border-gray-200">
                         {/* Logo and Title */}
                         <div className="mb-8 text-center">
-                            <div className="flex items-center justify-center gap-3 mb-3">
+                            <div className="flex items-center justify-center gap-3 mb-2">
                                 <img  
                                     className="w-12 h-12"  
                                     src="/Logo.png" 
@@ -65,12 +97,12 @@ export default function Login() {
                                     <h1 className="text-2xl font-bold text-gray-900">
                                         Statewide
                                     </h1>
-                                    <span className="text-base font-semibold text-blue-600">
+                                    <span className="text-base font-semibold text-gray-600">
                                         Escalator Cleaning
                                     </span>
                                 </div>
                             </div>
-                            <p className="text-sm text-gray-500 font-medium">Operations Portal</p>
+                            <p className="text-sm text-gray-500 font-medium ml-8">Operations Portal</p>
                         </div>
                         
                         {/* Login Form */}
