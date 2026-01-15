@@ -8,7 +8,7 @@ const Pending = () => {
 
   const handleLogout= async () => {
     await supabase.auth.signOut();
-    navigate('/login');
+    navigate('/login', {replace: true});
 
   }
 
@@ -31,7 +31,7 @@ const Pending = () => {
                 <div className="mb-8 ">
                     <div className="flex items-center justify-items-start gap-3 mb-2">
                         <img  
-                            className="w-12 h-12"  
+                            className="w-16 h-16"  
                             src="/Logo.png" 
                             alt="Statewide logo" 
                         />
@@ -44,7 +44,7 @@ const Pending = () => {
                             </span>
                         </div>
                     </div>
-                    <p className="text-sm text-gray-500 font-medium ml-15 md:text-md">Operations Portal</p>
+                    <p className="text-sm text-gray-500 pl-4 font-medium ml-15 md:text-md">Operations Portal</p>
                 </div>
                 
                 <div
@@ -63,7 +63,7 @@ const Pending = () => {
                           font-semibold hover:from-red-700 hover:to-red-800 disabled:from-blue-300 
                           disabled:to-blue-400 disabled:cursor-not-allowed transition-all duration-200 
                           shadow-lg hover:shadow-xl transform hover:-translate-y-0.5
-                          cursor-pointer"
+                          cursor-pointer mt-8"
                     >
                         {/* {loading ? "Logging in..." : "Log In"} */}
                         Sign Out
