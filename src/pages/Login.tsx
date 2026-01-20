@@ -51,7 +51,7 @@ export default function Login() {
                 return;
             }
             if(profile?.status === "DISABLED"){
-                toast("Your account has been disabled.");
+                toast.error("Your account has been disabled. Please contact admin.");
                 await supabase.auth.signOut();
                 return;
             }
@@ -146,7 +146,12 @@ export default function Login() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full bg-linear-to-r from-blue-600 to-blue-700 text-white py-3.5 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 disabled:from-blue-300 disabled:to-blue-400 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                                className="w-full bg-linear-to-r from-blue-600 to-blue-700
+                                 text-white py-3.5 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 
+                                 disabled:from-blue-300 disabled:to-blue-400 disabled:cursor-not-allowed transition-all 
+                                 duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5
+                                 cursor-pointer
+                                 "
                             >
                                 {loading ? "Logging in..." : "Log In"}
                             </button>
