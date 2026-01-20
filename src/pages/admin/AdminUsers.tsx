@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import toast from "react-hot-toast";
-import { Divide, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 type Status = "PENDING" | "ACTIVE" | "DISABLED";
 type Role = "ADMIN" | "EMPLOYEE";
