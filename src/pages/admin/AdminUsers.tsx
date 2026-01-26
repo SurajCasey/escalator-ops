@@ -205,6 +205,14 @@ export default function AdminUsers() {
       <p className="text-xs text-gray-500">
         Tip: Approving a user sets <code>status=ACTIVE</code>. Disabled users cannot access the app.
       </p>
+      <button
+  onClick={async () => {
+    const { data } = await supabase.auth.getSession();
+    console.log("ACCESS TOKEN:", data.session?.access_token);
+  }}
+>
+  PRINT ACCESS TOKEN
+</button>
     </div>
   );
 }
