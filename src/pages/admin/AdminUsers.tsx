@@ -27,20 +27,14 @@ export default function AdminUsers() {
 
   const fetchUsers = async () => {
     setLoading(true);
-
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name, email, role, status, created_at")
       .order("created_at", { ascending: false })
       .overrideTypes<Profile[]>();
-
     setLoading(false);
 
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
+    if (error) return toast.error(error.message);
     setUsers(data ?? []);
   };
 
@@ -53,37 +47,32 @@ export default function AdminUsers() {
 
     const user = users.find((u) => u.id === id);
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({ status })
-      .eq("id", id);
-
+    const { error } = await supabase.from("profiles").update({ status }).eq("id", id);
     setActingId(null);
 
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    if (error) return toast.error(error.message);
 
-    toast.success(status === "ACTIVE" ? 
-        `${user?.full_name ?? "User"}'s account is approved successfully` : 
-        `${user?.full_name ?? "User"}'s account is now disabled. ` 
+    toast.success(
+      status === "ACTIVE"
+        ? `${user?.full_name ?? "User"}'s account is approved successfully`
+        : `${user?.full_name ?? "User"}'s account is now disabled.`
     );
 
-
-    // Call backend email API
-    if (status === "ACTIVE" && user?.email) {
+    // Send email
+    if (user?.email) {
       try {
-        await sendApprovalEmail({
+        await sendEmail({
           to: user.email,
           name: user.full_name ?? undefined,
+          type: status === "ACTIVE" ? "approved" : "disabled",
         });
-      } catch {
-        toast.error("Approved, but email failed");
+      } catch (err) {
+        console.error(err);
+        toast.error(`Email failed to send for ${user.full_name ?? "user"}`);
       }
     }
 
-    // Update local state quickly (no full refetch required)
+    // Update local state
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
   };
 
@@ -97,13 +86,12 @@ export default function AdminUsers() {
           <h1 className="text-2xl font-semibold">User Management</h1>
           <p className="text-sm text-gray-600">Approve or disable user access.</p>
         </div>
-
         <button
           onClick={fetchUsers}
           className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50"
           disabled={loading}
         >
-          {loading ? "Refreshing..." : (<div className="flex items-center gap-2"><RefreshCw/> <span>Refresh</span></div>) }
+          {loading ? "Refreshing..." : <div className="flex items-center gap-2"><RefreshCw /> <span>Refresh</span></div>}
         </button>
       </div>
 
@@ -153,18 +141,10 @@ export default function AdminUsers() {
               ) : (
                 filtered.map((u) => (
                   <tr key={u.id}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{u.full_name ?? "—"}</div>
-                    </td>
+                    <td className="px-4 py-3">{u.full_name ?? "—"}</td>
                     <td className="px-4 py-3">{u.email}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full border px-2 py-0.5">
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={u.status} />
-                    </td>
+                    <td className="px-4 py-3"><span className="inline-flex rounded-full border px-2 py-0.5">{u.role}</span></td>
+                    <td className="px-4 py-3"><StatusBadge status={u.status} /></td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
                         {u.status === "PENDING" && (
@@ -185,7 +165,6 @@ export default function AdminUsers() {
                             </button>
                           </>
                         )}
-
                         {u.status === "ACTIVE" && (
                           <button
                             onClick={() => disableUser(u.id)}
@@ -195,7 +174,6 @@ export default function AdminUsers() {
                             {actingId === u.id ? "Disabling..." : "Disable"}
                           </button>
                         )}
-
                         {u.status === "DISABLED" && (
                           <button
                             onClick={() => approveUser(u.id)}
@@ -218,14 +196,12 @@ export default function AdminUsers() {
       <p className="text-xs text-gray-500">
         Tip: Approving a user sets <code>status=ACTIVE</code>. Disabled users cannot access the app.
       </p>
-      
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: Status }) {
   const label = status === "PENDING" ? "Pending" : status === "ACTIVE" ? "Active" : "Disabled";
-
   const cls =
     status === "ACTIVE"
       ? "border-green-200 bg-green-50 text-green-700"
@@ -233,34 +209,28 @@ function StatusBadge({ status }: { status: Status }) {
       ? "border-yellow-200 bg-yellow-50 text-yellow-800"
       : "border-red-200 bg-red-50 text-red-700";
 
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${cls}`}>
-      {label}
-    </span>
-  );
+  return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${cls}`}>{label}</span>;
 }
 
-async function sendApprovalEmail( params: { to: string; name?: string}){
-  const {data: sessionRes , error: sessionErr} = await supabase.auth.getSession();
-  if(sessionErr) throw sessionErr;
+// --- Email function ---
+async function sendEmail(params: { to: string; name?: string; type: "approved" | "disabled" }) {
+  const { data: sessionRes, error: sessionErr } = await supabase.auth.getSession();
+  if (sessionErr) throw sessionErr;
 
   const token = sessionRes.session?.access_token;
-  if(!token) throw new Error("No session token  (please login again).");
+  if (!token) throw new Error("No session token (please login again).");
 
-  const res = await fetch("api/send-email", {
+  const res = await fetch("/api/send-email", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
+      Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      to: params.to,
-      name: params.name,
-    }),
+    body: JSON.stringify(params),
   });
 
-  if(!res.ok){
-    throw new Error ("Failed to send approval email.")
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to send email: ${text}`);
   }
-
 }
