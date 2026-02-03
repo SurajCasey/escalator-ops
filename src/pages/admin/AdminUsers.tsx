@@ -70,6 +70,19 @@ export default function AdminUsers() {
         `${user?.full_name ?? "User"}'s account is now disabled. ` 
     );
 
+
+    // Call backend email API
+    if (status === "ACTIVE" && user?.email) {
+      try {
+        await sendApprovalEmail({
+          to: user.email,
+          name: user.full_name ?? undefined,
+        });
+      } catch {
+        toast.error("Approved, but email failed");
+      }
+    }
+
     // Update local state quickly (no full refetch required)
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
   };
@@ -205,14 +218,7 @@ export default function AdminUsers() {
       <p className="text-xs text-gray-500">
         Tip: Approving a user sets <code>status=ACTIVE</code>. Disabled users cannot access the app.
       </p>
-      <button
-  onClick={async () => {
-    const { data } = await supabase.auth.getSession();
-    console.log("ACCESS TOKEN:", data.session?.access_token);
-  }}
->
-  PRINT ACCESS TOKEN
-</button>
+      
     </div>
   );
 }
@@ -232,4 +238,29 @@ function StatusBadge({ status }: { status: Status }) {
       {label}
     </span>
   );
+}
+
+async function sendApprovalEmail( params: { to: string; name?: string}){
+  const {data: sessionRes , error: sessionErr} = await supabase.auth.getSession();
+  if(sessionErr) throw sessionErr;
+
+  const token = sessionRes.session?.access_token;
+  if(!token) throw new Error("No session token  (please login again).");
+
+  const res = await fetch("api/send-email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      to: params.to,
+      name: params.name,
+    }),
+  });
+
+  if(!res.ok){
+    throw new Error ("Failed to send approval email.")
+  }
+
 }
