@@ -11,6 +11,7 @@ import EmployeeLayout from "./layouts/EmployeeLayout"
 import RequireAdmin from "./components/RequireAdmin"
 import AdminLayout from "./layouts/AdminLayout"
 import AdminUsers from "./pages/admin/AdminUsers"
+import Clients from "./clients/clients"
 
 
 function App() {
@@ -22,17 +23,20 @@ function App() {
           <Route path="/" element={<Navigate to="/login" replace/>} />
           <Route path="/login" element={<Login/>}/>
           <Route path="/signup" element={<Signup/>}/>
+         
 
            {/* Require Pending for protection */}
           <Route element={<RequirePending/>}>
             <Route path="/pending" element={<Pending/>}/>
           </Route>
 
+          
 
           {/* Employee protected area */}
           <Route element={<RequireActive/>}>
             <Route element={<EmployeeLayout/>}>
               <Route path="/dashboard" element={<Dashboard/>}/>
+               <Route path="/employee/clients" element= {<Clients/>}/>
             </Route>     
           </Route>
    
@@ -41,8 +45,11 @@ function App() {
           <Route element={<RequireAdmin/>}>
             <Route element={<AdminLayout/>}>
               <Route path="/admin/users" element={<AdminUsers/>} />
+               <Route path="/admin/clients" element= {<Clients/>}/>
             </Route>
           </Route>
+
+         
   
           <Route path="*" element={<div className="p-6">404</div>}/>
         </Routes>

@@ -22,19 +22,11 @@ export default function Dashboard  ()  {
         load();
     }, [navigate])
 
-    const handleSignout = async () => {
-        await supabase.auth.signOut();
-        navigate("/login");
-    }
   return (
     <div>
         <h1>Temporary Dashboard</h1>
         <p>You are logged in as: {email} </p>
-        <button
-            onClick={handleSignout}
-        >
-            Logout
-        </button>
+      
     </div>
   )
 }
