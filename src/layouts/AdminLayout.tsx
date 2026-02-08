@@ -1,5 +1,5 @@
 import { Link, Outlet } from "react-router-dom";
-// import Logo from "../../public/logo.png";
+import Logo from "../assets/logo.png";
 import LogoutButton from "../components/LogoutButton";
 
 
@@ -16,7 +16,7 @@ export default function AdminLayout(){
                 <div className="text-xl font-bold flex flex-row gap-2 items-center 
                     bg-slate-900 shadow-neutral-200 p-4"
                 >
-                    <img src="/logo.png" className="w-10 h-10" />
+                    <img src={Logo} className="w-10 h-10" />
                     <h1>
                         Statewide Operations
                     </h1>

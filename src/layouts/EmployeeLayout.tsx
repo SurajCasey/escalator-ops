@@ -1,5 +1,5 @@
 import { Link, Outlet } from "react-router-dom";
-import Logo from "../../public/logo.png";
+import Logo from "../assets/Logo.png";
 import LogoutButton from "../components/LogoutButton";
 
 
