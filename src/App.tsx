@@ -1,8 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
-import Login from "./pages/Login"
-import Signup from "./pages/Signup"
-import Pending from "./pages/Pending"
-import Dashboard from "./pages/Dashboard"
+import Login from "./pages/auth/Login"
+import Signup from "./pages/auth/Signup"
+import Pending from "./pages/auth/Pending"
+import Dashboard from "./pages/shared/Dashboard"
 import { Toaster } from "react-hot-toast"
 
 import RequireActive from "./components/RequireActive"
@@ -11,7 +11,8 @@ import EmployeeLayout from "./layouts/EmployeeLayout"
 import RequireAdmin from "./components/RequireAdmin"
 import AdminLayout from "./layouts/AdminLayout"
 import AdminUsers from "./pages/admin/AdminUsers"
-import Clients from "./clients/clients"
+import Clients from "./clients/Clients"
+import Inventory from "./pages/shared/Inventory"
 
 
 function App() {
@@ -36,7 +37,8 @@ function App() {
           <Route element={<RequireActive/>}>
             <Route element={<EmployeeLayout/>}>
               <Route path="/dashboard" element={<Dashboard/>}/>
-               <Route path="/employee/clients" element= {<Clients/>}/>
+               <Route path="/clients" element= {<Clients/>}/>
+               <Route path="/inventory" element={<Inventory/>}/>
             </Route>     
           </Route>
    
@@ -44,8 +46,10 @@ function App() {
           {/* Admin protected area */}
           <Route element={<RequireAdmin/>}>
             <Route element={<AdminLayout/>}>
+              <Route path="/admin/dashboard" element={<Dashboard/>}/>
               <Route path="/admin/users" element={<AdminUsers/>} />
-               <Route path="/admin/clients" element= {<Clients/>}/>
+              <Route path="/admin/clients" element= {<Clients/>}/>
+              <Route path="/admin/inventory" element={<Inventory/>}/>
             </Route>
           </Route>
 

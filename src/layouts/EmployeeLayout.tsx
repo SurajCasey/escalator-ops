@@ -43,6 +43,12 @@ export default function EmployeeLayout() {
                     </Link>
                     <Link 
                         className="p-2 hover:bg-blue-900 rounded-md"
+                        to="/inventory"
+                    >
+                        Inventory
+                    </Link>
+                    <Link 
+                        className="p-2 hover:bg-blue-900 rounded-md"
                         to="/employees">
                         Employees   
                     </Link>
