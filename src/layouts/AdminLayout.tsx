@@ -14,7 +14,7 @@ export default function AdminLayout(){
                 lg:w-64 lg:min-w-64 lg:max-w-64"
             >
                 <div className="text-xl font-bold flex flex-row gap-2 items-center 
-                    bg-slate-900 shadow-neutral-200 p-4"
+                    bg-slate-900 border-b border-gray-600 shadow-neutral-200 p-4"
                 >
                     <img src={Logo} className="w-10 h-10" />
                     <h1>
