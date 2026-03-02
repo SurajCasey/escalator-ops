@@ -22,13 +22,8 @@ export default function AdminLayout(){
                     </h1>
                 </div>
                 <nav className="flex flex-col gap-2 px-4">
+                   
                     <Link 
-                        to="/admin/users"
-                        className="p-2 hover:bg-blue-900 rounded-md"
-                    >
-                        Users
-                    </Link>
-                     <Link 
                         className="p-2 hover:bg-blue-900 rounded-md"
                         to="/admin/dashboard">
                         Dashboard
@@ -53,6 +48,12 @@ export default function AdminLayout(){
                         to="/admin/inventory"
                     >
                      Inventory
+                    </Link>
+                     <Link 
+                        to="/admin/users"
+                        className="p-2 hover:bg-blue-900 rounded-md"
+                    >
+                        Users
                     </Link>
                     <Link 
                         className="p-2 hover:bg-blue-900 rounded-md"
