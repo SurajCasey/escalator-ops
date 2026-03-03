@@ -6,10 +6,10 @@ import LogoutButton from "../components/LogoutButton";
 export default function AdminLayout(){
     return(
           <div
-            className="flex flex-row gap-4 "
+            className="flex flex-row"
         >
             <aside 
-                className="w-64 min-w-64 max-w-64 h-screen bg-slate-800 text-white 
+                className="w-64 min-w-64 max-w-64  bg-slate-800 text-white 
                 flex flex-col gap-4 md:w-56 md:min-w-56 md:max-w-56 
                 lg:w-64 lg:min-w-64 lg:max-w-64"
             >
@@ -67,7 +67,7 @@ export default function AdminLayout(){
                     </Link>
                 </nav>
 
-                <div className="mt-auto">
+                <div className="mt-auto inset-0">
                     <LogoutButton />
                 </div>
 

@@ -11,8 +11,9 @@ import EmployeeLayout from "./layouts/EmployeeLayout"
 import RequireAdmin from "./components/RequireAdmin"
 import AdminLayout from "./layouts/AdminLayout"
 import AdminUsers from "./pages/admin/AdminUsers"
-import Clients from "./clients/Clients"
+import Clients from "./components/clients/Clients"
 import Inventory from "./pages/shared/Inventory"
+import Settings from "./pages/admin/Settings"
 
 
 function App() {
@@ -50,6 +51,7 @@ function App() {
               <Route path="/admin/users" element={<AdminUsers/>} />
               <Route path="/admin/clients" element= {<Clients/>}/>
               <Route path="/admin/inventory" element={<Inventory/>}/>
+              <Route path="/admin/settings" element={<Settings/>}/>
             </Route>
           </Route>
 

@@ -6,4 +6,10 @@
 
 @theme{
   --color-loginbg: #2d2522;
+  --color-primary: #2a71d5;
+  --color-background-light: #f8fafb;
+  --color-background-dark: #101828;
+  --color-sidebar-dark: #0F172A;
+  --color-border-neutral: #D1D5DB;
+  --color-success: #4CAF50;
 }
