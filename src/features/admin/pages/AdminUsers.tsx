@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
 import { RefreshCw } from "lucide-react";
 

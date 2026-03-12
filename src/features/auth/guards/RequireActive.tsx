@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import { Navigate, Outlet } from "react-router-dom";
 
 type Status = "PENDING" | "ACTIVE" | "DISABLED";

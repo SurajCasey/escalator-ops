@@ -1,74 +1,67 @@
 import { useState } from "react"
-import { supabase } from "../../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import BackgroundLogin from "../../components/Backgroundlogin";
+import BackgroundLogin from "../components/BackgroundLogin";
 
 
-export default function Login() {
+export default function Signup() {
+    const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if(!fullName.trim()){
+          toast.error("Please enter your full name.");
+          return;
+        }
+
         setLoading(true);
         try {
-            const {data, error } = await supabase.auth.signInWithPassword({
+          // Create auth user
+          const {data, error:signUpError } = await supabase.auth.signUp({
                 email, password
-            });
+          });
 
-            if (error) {
-                toast.error(error.message);
-                return;
-            }
-            
-            const user= data.user
-            
-            if(!user){
-                toast.error("Login failed. Please try again.")
-                return;
-            }
+          if (signUpError) {
+              toast.error(signUpError.message);
+              return;
+          }  
 
-            // Fetch profile status and role
-            const { data:profile, error:profileError} = await supabase
-            .from("profiles")
-            .select("status, role")
-            .eq("id", user.id)
-            .single();
+          const user = data.user;
 
-            if(profileError || !profile){
-                toast.error("Unable to verify account status.");
-                await supabase.auth.signOut();
-                return;
-            }
+          // if email confirmations are enabled, user can be null.
+          if(!user){
+            toast("Account created. Please check your email to confirm before logging in.",
+              {icon: "📩"}
+            );
+            navigate("/login", {replace: true});
+            return;
+          }
 
-            // Redirect based on status
-            if(profile?.status === "PENDING"){
-                toast.success("Your account is pending admin approval.")
-                navigate("/pending", {replace: true});
-                return;
-            }
-            if(profile?.status === "DISABLED"){
-                toast.error("Your account has been disabled. Please contact admin.");
-                await supabase.auth.signOut();
-                return;
-            }
+          // Insert profile row in supabase
+          const { error: profileError} = await supabase.from("profiles").insert({
+            id: user.id,
+            email: user.email,
+            full_name: fullName.trim(),
+            role: "EMPLOYEE",
+            status: "PENDING",
+          });
 
-            // Role based redirect 
-            toast.success("Login successful");
-
-            if(profile?.role === "ADMIN"){
-                navigate("/admin/dashboard", {replace: true});
-                return;
-            }else{  
-                navigate("/dashboard", {replace: true});
-                return;
-            }
+          if(profileError){
+            toast.error(profileError.message);
+            await supabase.auth.signOut();
+            return;
+          }
+          toast.success("Signup successful! Waiting for admin approval.");
+          navigate("/pending", {replace: true});          
         } catch (error) {
             toast.error("An unexpected error occurred. Please try again")
-            console.error("login error:", error)
+            console.error("Signup error:", error)
         } finally {
             setLoading(false);
         }
@@ -114,7 +107,24 @@ export default function Login() {
                         </div>
                         
                         {/* Login Form */}
-                        <form onSubmit={handleSubmit} className="space-y-5">
+                        <form onSubmit={handleSignup} className="space-y-5">
+                            <div>
+                              <label 
+                                htmlFor="fullName"
+                                className="block text-sm font-semibold text-gray-700 mb-2"
+                              >
+                                Full Name
+                              </label>
+                              <input
+                                id="fullName" 
+                                type="text"
+                                placeholder="Enter full name"
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-blue-500 outline-none transition-all" 
+                                value={fullName}
+                                onChange={(e)=> setFullName(e.target.value)}
+                                disabled={loading}
+                              />
+                            </div>
                             <div>
                                 <label 
                                     htmlFor="email" 
@@ -154,26 +164,21 @@ export default function Login() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full bg-linear-to-r from-blue-600 to-blue-700
-                                 text-white py-3.5 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 
-                                 disabled:from-blue-300 disabled:to-blue-400 disabled:cursor-not-allowed transition-all 
-                                 duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5
-                                 cursor-pointer
-                                 "
+                                className="w-full bg-linear-to-r from-blue-600 to-blue-700 text-white py-3.5 px-4 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 disabled:from-blue-300 disabled:to-blue-400 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                             >
-                                {loading ? "Logging in..." : "Log In"}
+                                {loading ? "Creating Account..." : "Create Account"}
                             </button>
                         </form>
 
                         {/* Sign Up Link */}
                         <div className="mt-6 text-center">
                             <p className="text-sm text-gray-600">
-                                Don't have an account?{' '}
+                                Already have an account?{' '}
                                 <a 
-                                    href="/signup" 
+                                    href="/login" 
                                     className="text-blue-600 font-semibold hover:text-blue-700 hover:underline transition-colors"
                                 >
-                                    Sign up
+                                   Log In
                                 </a>
                             </p>
                         </div>

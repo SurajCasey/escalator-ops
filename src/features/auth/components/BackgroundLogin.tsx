@@ -1,4 +1,4 @@
-import BgImg from '../assets/MobileLoginBg.png';
+import BgImg from "../../../assets/MobileLoginBg.png";
 
 export default function BackgroundLogin() {
     return (

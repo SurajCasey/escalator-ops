@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
+import AddClientModal from "./AddClientModal";
 
 type Client = {
   id: string;
   name: string;
-  email: string;
-  phone: string;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
   status: "ACTIVE" | "INACTIVE" | "PENDING";
   created_at: string;
   company_type?: string;
@@ -45,6 +48,7 @@ export default function Clients() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showAddModal, setShowAddModal] = useState(false);
   const pageSize = 10;
 
   const fetchClients = async () => {
@@ -69,7 +73,8 @@ export default function Clients() {
     const matchesSearch =
       search === "" ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.email.toLowerCase().includes(search.toLowerCase());
+      (c.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (c.contact_person ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesStatus =
       statusFilter === "All Statuses" ||
       c.status === statusFilter.toUpperCase();
@@ -104,7 +109,10 @@ export default function Clients() {
               Manage your customer database, track status, and view historical engagement data.
             </p>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors shadow-sm">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors shadow-sm"
+          >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
@@ -211,8 +219,8 @@ export default function Clients() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{client.email}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{client.phone}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{client.email ?? "—"}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{client.phone ?? "—"}</td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${cfg.badge}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -354,6 +362,12 @@ export default function Clients() {
           ))}
         </div>
       </div>
+
+      <AddClientModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onCreated={fetchClients}
+      />
     </div>
   );
 }
