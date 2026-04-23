@@ -16,6 +16,8 @@ import Inventory from "./features/shared/pages/Inventory"
 import Settings from "./features/admin/pages/Settings"
 import Schedule from "./features/shared/pages/Schedule"
 import Calendar from "./features/shared/pages/Calendar"
+import Employees from "./features/admin/pages/Employees"
+import Reports from "./features/shared/pages/Reports"
 
 
 function App() {
@@ -27,14 +29,11 @@ function App() {
           <Route path="/" element={<Navigate to="/login" replace/>} />
           <Route path="/login" element={<Login/>}/>
           <Route path="/signup" element={<Signup/>}/>
-         
 
-           {/* Require Pending for protection */}
+          {/* Require Pending for protection */}
           <Route element={<RequirePending/>}>
             <Route path="/pending" element={<Pending/>}/>
           </Route>
-
-          
 
           {/* Employee protected area */}
           <Route element={<RequireActive/>}>
@@ -42,12 +41,13 @@ function App() {
               <Route path="/dashboard" element={<Dashboard/>}/>
               <Route path="/schedule" element={<Schedule/>}/>
               <Route path="/calendar" element={<Calendar/>}/>
-               <Route path="/clients" element= {<Clients/>}/>
-               <Route path="/inventory" element={<Inventory/>}/>
-               <Route path="/settings" element={<Settings/>}/>
+              <Route path="/clients" element={<Clients/>}/>
+              <Route path="/inventory" element={<Inventory/>}/>
+              <Route path="/reports" element={<Reports/>}/>
+              <Route path="/employees" element={<Employees/>}/>
+              <Route path="/settings" element={<Settings/>}/>
             </Route>     
           </Route>
-   
 
           {/* Admin protected area */}
           <Route element={<RequireAdmin/>}>
@@ -56,14 +56,14 @@ function App() {
               <Route path="/admin/schedule" element={<Schedule/>}/>
               <Route path="/admin/calendar" element={<Calendar/>}/>
               <Route path="/admin/users" element={<AdminUsers/>} />
-              <Route path="/admin/clients" element= {<Clients/>}/>
+              <Route path="/admin/clients" element={<Clients/>}/>
               <Route path="/admin/inventory" element={<Inventory/>}/>
+              <Route path="/admin/reports" element={<Reports/>}/>
+              <Route path="/admin/employees" element={<Employees/>}/>
               <Route path="/admin/settings" element={<Settings/>}/>
             </Route>
           </Route>
 
-         
-  
           <Route path="*" element={<div className="p-6">404</div>}/>
         </Routes>
       </BrowserRouter>
