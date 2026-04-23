@@ -22,7 +22,7 @@ export default function AdminLayout() {
         {/* LOGO */}
         <div className="flex items-center gap-2 bg-slate-900 border-b border-gray-600 p-4">
           <img src={Logo} className="w-10 h-10" />
-          <h1 className="text-xl font-bold">Statewide Operations</h1>
+          <h1 className="text-xl font-bold">Statewide </h1>
         </div>
 
         {/* NAV */}

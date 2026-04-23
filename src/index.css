@@ -13,3 +13,32 @@
   --color-border-neutral: #D1D5DB;
   --color-success: #4CAF50;
 }
+
+body {
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+:root[data-ops-theme="system"] body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+:root[data-ops-theme="ocean"] body {
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+  color: #082f49;
+}
+
+:root[data-ops-theme="forest"] body {
+  background: linear-gradient(180deg, #f0fdf4 0%, #f8fafc 100%);
+  color: #14532d;
+}
+
+:root[data-ops-theme="midnight"] body {
+  background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+  color: #e2e8f0;
+}
+
+:root[data-ops-theme="midnight"] ::selection {
+  background: #38bdf8;
+  color: #0f172a;
+}

@@ -14,6 +14,8 @@ import AdminUsers from "./features/admin/pages/AdminUsers"
 import Clients from "./features/clients/components/Clients"
 import Inventory from "./features/shared/pages/Inventory"
 import Settings from "./features/admin/pages/Settings"
+import Schedule from "./features/shared/pages/Schedule"
+import Calendar from "./features/shared/pages/Calendar"
 
 
 function App() {
@@ -38,8 +40,11 @@ function App() {
           <Route element={<RequireActive/>}>
             <Route element={<EmployeeLayout/>}>
               <Route path="/dashboard" element={<Dashboard/>}/>
+              <Route path="/schedule" element={<Schedule/>}/>
+              <Route path="/calendar" element={<Calendar/>}/>
                <Route path="/clients" element= {<Clients/>}/>
                <Route path="/inventory" element={<Inventory/>}/>
+               <Route path="/settings" element={<Settings/>}/>
             </Route>     
           </Route>
    
@@ -48,6 +53,8 @@ function App() {
           <Route element={<RequireAdmin/>}>
             <Route element={<AdminLayout/>}>
               <Route path="/admin/dashboard" element={<Dashboard/>}/>
+              <Route path="/admin/schedule" element={<Schedule/>}/>
+              <Route path="/admin/calendar" element={<Calendar/>}/>
               <Route path="/admin/users" element={<AdminUsers/>} />
               <Route path="/admin/clients" element= {<Clients/>}/>
               <Route path="/admin/inventory" element={<Inventory/>}/>
