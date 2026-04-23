@@ -74,7 +74,7 @@ export default function Schedule() {
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6 xl:p-8 space-y-6">
       {/* Header */}
-      <section className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-900 text-white p-6 md:p-8 shadow-lg">
+      <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-cyan-900 text-white p-6 md:p-8 shadow-lg">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm text-slate-300">Operations Planning</p>

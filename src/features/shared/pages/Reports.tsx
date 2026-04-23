@@ -326,8 +326,8 @@ export default function Reports() {
         <div className="animate-pulse space-y-5">
           <div className="h-12 w-72 rounded-2xl bg-slate-200" />
           <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="h-[44rem] rounded-3xl bg-white" />
-            <div className="h-[44rem] rounded-3xl bg-white" />
+            <div className="h-176 rounded-3xl bg-white" />
+            <div className="h-176 rounded-3xl bg-white" />
           </div>
         </div>
       </div>
@@ -337,7 +337,7 @@ export default function Reports() {
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6 xl:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-blue-900 p-6 text-white shadow-xl md:p-8">
+        <section className="rounded-3xl bg-linear-to-r from-slate-950 via-slate-900 to-blue-900 p-6 text-white shadow-xl md:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="text-sm uppercase tracking-[0.2em] text-sky-200/80">Compliance Records</p>
@@ -447,15 +447,15 @@ export default function Reports() {
                   <tr key={document.id} className="hover:bg-slate-50">
                     <td className="px-5 py-4 align-top">
                       <div className="max-w-xs">
-                        <p className="break-words font-medium text-slate-900">{document.title}</p>
+                        <p className="wrap-break-word font-medium text-slate-900">{document.title}</p>
                         <p className="mt-1 text-xs text-slate-400">By {document.createdByName || "Unknown user"}</p>
                       </div>
                     </td>
                     <td className="px-5 py-4 align-top text-sm text-slate-600">{humanizeType(document.type)}</td>
                     <td className="px-5 py-4 align-top">
                       <div className="max-w-xs text-sm text-slate-600">
-                        <p className="break-words">{document.clientName || "-"}</p>
-                        <p className="mt-1 break-words text-xs text-slate-400">{document.siteName || "No site"}</p>
+                        <p className="wrap-break-word">{document.clientName || "-"}</p>
+                        <p className="mt-1 wrap-break-word text-xs text-slate-400">{document.siteName || "No site"}</p>
                       </div>
                     </td>
                     <td className="px-5 py-4 align-top">
@@ -500,7 +500,7 @@ export default function Reports() {
       </div>
 
       {editorOpen && selectedDocument && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4">
           <button
             type="button"
             aria-label="Close editor overlay"
@@ -800,7 +800,7 @@ function MetaPill({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm text-slate-700">{value || "-"}</p>
+      <p className="mt-1 wrap-break-word text-sm text-slate-700">{value || "-"}</p>
     </div>
   );
 }

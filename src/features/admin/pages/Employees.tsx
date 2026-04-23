@@ -206,7 +206,7 @@ export default function Employees() {
                     <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${avatarBg(emp.full_name)}`}>
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarBg(emp.full_name)}`}>
                             {initials(emp.full_name)}
                           </div>
                           {isEditingThis ? (

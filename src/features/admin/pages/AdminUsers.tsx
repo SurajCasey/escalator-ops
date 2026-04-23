@@ -156,7 +156,7 @@ export default function AdminUsers() {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[130px]"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-32.5"
             >
               <option>All Roles</option>
               <option value="ADMIN">Admin</option>
@@ -230,7 +230,7 @@ export default function AdminUsers() {
                       <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${avatarColor(u.full_name)}`}>
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarColor(u.full_name)}`}>
                               {getInitials(u.full_name)}
                             </div>
                             <span className="font-medium text-gray-900 text-sm">{u.full_name ?? "—"}</span>
@@ -353,7 +353,7 @@ export default function AdminUsers() {
             },
           ].map((stat) => (
             <div key={stat.label} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${stat.iconBg}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${stat.iconBg}`}>
                 {stat.icon}
               </div>
               <div>

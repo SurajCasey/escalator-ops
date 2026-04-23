@@ -238,7 +238,7 @@ export default function Inventory() {
             { label: "Out of Stock", value: stats.out, icon: <AlertTriangle className="h-5 w-5 text-red-500" />, bg: "bg-red-50" },
           ].map((s) => (
             <div key={s.label} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full ${s.bg} flex items-center justify-center flex-shrink-0`}>{s.icon}</div>
+              <div className={`w-10 h-10 rounded-full ${s.bg} flex items-center justify-center shrink-0`}>{s.icon}</div>
               <div>
                 <p className="text-xs text-gray-500">{s.label}</p>
                 <p className="text-2xl font-bold text-gray-900">{s.value}</p>
@@ -249,7 +249,7 @@ export default function Inventory() {
 
         {/* Filters */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-wrap gap-3">
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative flex-1 min-w-50">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input type="text" placeholder="Search items…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
@@ -289,7 +289,7 @@ export default function Inventory() {
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <p className="font-medium text-gray-900 text-sm">{item.name}</p>
-                        {item.notes && <p className="text-xs text-gray-400 truncate max-w-[200px]">{item.notes}</p>}
+                        {item.notes && <p className="text-xs text-gray-400 truncate max-w-50">{item.notes}</p>}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{item.category}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{item.location ?? "—"}</td>

@@ -318,7 +318,7 @@ export default function Settings() {
           <div className="h-10 w-48 rounded-xl bg-slate-200" />
           <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
             <div className="h-96 rounded-2xl bg-white" />
-            <div className="h-[36rem] rounded-2xl bg-white" />
+            <div className="h-144 rounded-2xl bg-white" />
           </div>
         </div>
       </div>
@@ -338,7 +338,7 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6 xl:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-sky-900 p-6 text-white shadow-lg md:p-8">
+        <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-sky-900 p-6 text-white shadow-lg md:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-sm text-slate-300">Account Control Centre</p>
@@ -469,7 +469,7 @@ export default function Settings() {
                           onClick={() => updateSettings({ theme: option.key })}
                           className={`rounded-2xl border p-4 text-left transition ${selected ? "border-sky-500 ring-2 ring-sky-200" : "border-slate-200 hover:border-slate-300"}`}
                         >
-                          <div className={`h-20 rounded-xl bg-gradient-to-br ${option.swatch}`} />
+                          <div className={`h-20 rounded-xl bg-linear-to-br ${option.swatch}`} />
                           <div className="mt-3 flex items-center gap-2 text-slate-900">
                             {option.icon}
                             <span className="font-medium">{option.label}</span>
