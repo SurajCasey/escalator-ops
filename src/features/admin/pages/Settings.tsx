@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import {
-  Bell, Briefcase, Camera, CheckCircle2, ChevronLeft, ChevronRight,
+  Bell, Briefcase, Camera, ChevronLeft, ChevronRight,
   Clock3, FileText, Globe2, Lock, Monitor, MoonStar,
   Palette, Save, ShieldCheck, Sun, UserCircle2, Users,
 } from "lucide-react";
@@ -413,7 +413,7 @@ export default function Settings() {
           {/* Completion ring */}
           <div className="shrink-0 flex flex-col items-center gap-1">
             <div className="relative h-16 w-16">
-              <svg viewBox="0 0 36 36" className="rotate-[-90deg] h-16 w-16">
+              <svg viewBox="0 0 36 36" className="-rotate-90 h-16 w-16">
                 <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3" />
                 <circle cx="18" cy="18" r="15" fill="none" stroke={profileCompletion === 100 ? "#34d399" : "#60a5fa"}
                   strokeWidth="3" strokeLinecap="round"
