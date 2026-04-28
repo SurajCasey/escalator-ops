@@ -3,30 +3,57 @@ import { supabase } from "../lib/supabase";
 import toast from "react-hot-toast";
 
 export type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
+export type JobType = "ADHOC" | "CONTRACT";
 
 export type Job = {
   id: string;
   title: string;
+  client_id: string | null;
   client_name: string;
   site_name: string | null;
   assigned_to: string | null;
   assigned_to_name: string | null;
   status: JobStatus;
   scheduled_at: string;
+  completed_at: string | null;
+  flat_rate: number | null;
   notes: string | null;
   created_at: string;
+  job_type: JobType;
+  frequency_days: number | null;
+  parent_job_id: string | null;
 };
 
 export type JobInput = {
   title: string;
+  client_id?: string | null;
   client_name: string;
   site_name?: string;
   assigned_to?: string | null;
   assigned_to_name?: string;
   status: JobStatus;
   scheduled_at: string;
+  flat_rate?: number | null;
   notes?: string;
+  job_type?: JobType;
+  frequency_days?: number | null;
+  parent_job_id?: string | null;
 };
+
+/** Human-readable label for a frequency value in days */
+export function frequencyLabel(days: number | null | undefined): string {
+  if (!days) return "";
+  const map: Record<number, string> = {
+    7: "Weekly",
+    14: "Fortnightly",
+    30: "Monthly",
+    60: "Every 2 months",
+    90: "Quarterly",
+    180: "Every 6 months",
+    365: "Annually",
+  };
+  return map[days] ?? `Every ${days} days`;
+}
 
 export function useJobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -73,6 +100,58 @@ export function useJobs() {
     return true;
   };
 
+  const markComplete = async (id: string): Promise<boolean> => {
+    const job = jobs.find((j) => j.id === id);
+    const now = new Date().toISOString();
+
+    // Mark the current job complete
+    const { error } = await supabase
+      .from("jobs")
+      .update({ status: "COMPLETED", completed_at: now })
+      .eq("id", id);
+
+    if (error) {
+      toast.error(error.message);
+      return false;
+    }
+
+    // Auto-schedule next occurrence for contract jobs
+    if (job?.job_type === "CONTRACT" && job.frequency_days) {
+      const nextDate = new Date(now);
+      nextDate.setDate(nextDate.getDate() + job.frequency_days);
+
+      const nextJob: JobInput = {
+        title: job.title,
+        client_id: job.client_id,
+        client_name: job.client_name,
+        site_name: job.site_name ?? undefined,
+        assigned_to: job.assigned_to,
+        assigned_to_name: job.assigned_to_name ?? undefined,
+        status: "SCHEDULED",
+        scheduled_at: nextDate.toISOString(),
+        flat_rate: job.flat_rate,
+        notes: job.notes ?? undefined,
+        job_type: "CONTRACT",
+        frequency_days: job.frequency_days,
+        parent_job_id: id,
+      };
+
+      const { error: nextErr } = await supabase.from("jobs").insert(nextJob);
+
+      if (nextErr) {
+        toast.error("Completed, but failed to schedule next occurrence: " + nextErr.message);
+      } else {
+        const label = nextDate.toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
+        toast.success(`Job complete! Next occurrence auto-scheduled for ${label}.`, { duration: 5000 });
+      }
+    } else {
+      toast.success("Job marked as complete.");
+    }
+
+    await fetchJobs();
+    return true;
+  };
+
   const deleteJob = async (id: string): Promise<boolean> => {
     const { error } = await supabase.from("jobs").delete().eq("id", id);
     if (error) {
@@ -84,5 +163,5 @@ export function useJobs() {
     return true;
   };
 
-  return { jobs, loading, fetchJobs, createJob, updateJob, deleteJob };
+  return { jobs, loading, fetchJobs, createJob, updateJob, markComplete, deleteJob };
 }

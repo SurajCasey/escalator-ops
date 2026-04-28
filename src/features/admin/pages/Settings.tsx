@@ -1,27 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import {
-  Bell,
-  Briefcase,
-  CheckCircle2,
-  ChevronRight,
-  Clock3,
-  FileText,
-  Globe2,
-  Lock,
-  Monitor,
-  MoonStar,
-  Palette,
-  Save,
-  ShieldCheck,
-  Sun,
-  Upload,
-  UserCircle2,
-  Users,
+  Bell, Briefcase, Camera, CheckCircle2, ChevronLeft, ChevronRight,
+  Clock3, FileText, Globe2, Lock, Monitor, MoonStar,
+  Palette, Save, ShieldCheck, Sun, UserCircle2, Users,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 
-type Role = "ADMIN" | "EMPLOYEE";
+type Role   = "ADMIN" | "EMPLOYEE";
 type Section = "profile" | "appearance" | "notifications" | "operations" | "security" | "legal";
 type ThemeOption = "system" | "ocean" | "forest" | "midnight";
 
@@ -31,13 +17,13 @@ type ProfileRecord = {
   email: string | null;
   role: Role;
   status: string | null;
+  avatar_url: string | null;
+  phone: string | null;
+  job_title: string | null;
+  bio: string | null;
 };
 
-type StoredSettings = {
-  avatarDataUrl: string;
-  phone: string;
-  jobTitle: string;
-  bio: string;
+type UiPrefs = {
   theme: ThemeOption;
   compactMode: boolean;
   emailDigest: boolean;
@@ -54,11 +40,7 @@ type StoredSettings = {
   replyTo: string;
 };
 
-const DEFAULT_SETTINGS: StoredSettings = {
-  avatarDataUrl: "",
-  phone: "",
-  jobTitle: "",
-  bio: "",
+const DEFAULT_PREFS: UiPrefs = {
   theme: "system",
   compactMode: false,
   emailDigest: true,
@@ -75,39 +57,113 @@ const DEFAULT_SETTINGS: StoredSettings = {
   replyTo: "ops@statewide.example",
 };
 
-const NAV_ITEMS: { key: Section; label: string; icon: React.ReactNode; description: string }[] = [
-  { key: "profile", label: "Profile", icon: <UserCircle2 className="h-4 w-4" />, description: "Personal details and profile photo" },
-  { key: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" />, description: "Theme and interface preferences" },
-  { key: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" />, description: "Alerts, reminders, and digests" },
-  { key: "operations", label: "Operations", icon: <Briefcase className="h-4 w-4" />, description: "Field defaults and workflow rules" },
-  { key: "security", label: "Security", icon: <Lock className="h-4 w-4" />, description: "Password and account protection" },
-  { key: "legal", label: "Legal", icon: <FileText className="h-4 w-4" />, description: "Terms, privacy, and compliance" },
+const NAV_ITEMS: { key: Section; label: string; icon: React.ReactNode; desc: string }[] = [
+  { key: "profile",       label: "Profile",       icon: <UserCircle2 className="h-4 w-4" />, desc: "Photo, name & contact" },
+  { key: "appearance",    label: "Appearance",    icon: <Palette className="h-4 w-4" />,     desc: "Theme & interface" },
+  { key: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" />,        desc: "Alerts & reminders" },
+  { key: "operations",    label: "Operations",    icon: <Briefcase className="h-4 w-4" />,   desc: "Field defaults" },
+  { key: "security",      label: "Security",      icon: <Lock className="h-4 w-4" />,        desc: "Password & access" },
+  { key: "legal",         label: "Legal",         icon: <FileText className="h-4 w-4" />,    desc: "Terms & compliance" },
 ];
 
-const THEME_OPTIONS: { key: ThemeOption; label: string; description: string; icon: React.ReactNode; swatch: string }[] = [
-  { key: "system", label: "System", description: "Match the device preference.", icon: <Monitor className="h-4 w-4" />, swatch: "from-slate-100 via-slate-200 to-slate-300" },
-  { key: "ocean", label: "Ocean", description: "Cool blue workspace for dispatch-heavy days.", icon: <Sun className="h-4 w-4" />, swatch: "from-cyan-100 via-sky-200 to-blue-300" },
-  { key: "forest", label: "Forest", description: "Soft green surfaces with calmer contrast.", icon: <Globe2 className="h-4 w-4" />, swatch: "from-emerald-100 via-lime-200 to-green-300" },
-  { key: "midnight", label: "Midnight", description: "Dark shell for low-light operation rooms.", icon: <MoonStar className="h-4 w-4" />, swatch: "from-slate-700 via-slate-800 to-slate-950" },
+const THEME_OPTIONS: { key: ThemeOption; label: string; icon: React.ReactNode; swatch: string }[] = [
+  { key: "system",   label: "System",   icon: <Monitor className="h-4 w-4" />, swatch: "from-slate-100 via-slate-200 to-slate-300" },
+  { key: "ocean",    label: "Ocean",    icon: <Sun className="h-4 w-4" />,     swatch: "from-cyan-100 via-sky-200 to-blue-300" },
+  { key: "forest",   label: "Forest",   icon: <Globe2 className="h-4 w-4" />,  swatch: "from-emerald-100 via-lime-200 to-green-300" },
+  { key: "midnight", label: "Midnight", icon: <MoonStar className="h-4 w-4" />, swatch: "from-slate-700 via-slate-800 to-slate-950" },
 ];
 
-function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+/* ── helpers ─────────────────────────────────────────────────── */
+function getInitials(v: string) {
+  return v.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+}
+const PALETTE = ["bg-blue-500","bg-violet-500","bg-pink-500","bg-teal-500","bg-orange-500","bg-indigo-500"];
+function avatarBg(name: string | null) {
+  return name ? PALETTE[name.charCodeAt(0) % PALETTE.length] : PALETTE[0];
+}
+function humanize(v: string) {
+  return v.toLowerCase().split("_").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+function storageKey(uid: string) { return `ops-prefs:${uid}`; }
+function readPrefs(uid: string): UiPrefs {
+  try {
+    const raw = localStorage.getItem(storageKey(uid));
+    return raw ? { ...DEFAULT_PREFS, ...(JSON.parse(raw) as Partial<UiPrefs>) } : DEFAULT_PREFS;
+  } catch { return DEFAULT_PREFS; }
+}
+function savePrefs(uid: string, prefs: UiPrefs) {
+  localStorage.setItem(storageKey(uid), JSON.stringify(prefs));
+}
+function applyTheme(t: ThemeOption) {
+  document.documentElement.setAttribute("data-ops-theme", t);
+}
+
+/** Read a file as a base64 data-url via FileReader */
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result;
+      if (typeof result === "string" && result.length > 0) resolve(result);
+      else reject(new Error("FileReader returned empty result"));
+    };
+    reader.onerror = () => reject(new Error("FileReader failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Resize a base64 data-url to maxSize×maxSize, returns resized jpeg data-url.
+ *  Falls back to the original data-url if canvas is unavailable. */
+function resizeDataUrl(dataUrl: string, maxSize = 300): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(maxSize / (img.naturalWidth || 1), maxSize / (img.naturalHeight || 1), 1);
+        const w = Math.max(1, Math.round((img.naturalWidth  || maxSize) * scale));
+        const h = Math.max(1, Math.round((img.naturalHeight || maxSize) * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(dataUrl); return; }          // fallback: original
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, w, h);
+        const out = canvas.toDataURL("image/jpeg", 0.92);
+        resolve(out && out !== "data:," ? out : dataUrl); // fallback: original
+      } catch {
+        resolve(dataUrl);                                 // fallback: original
+      }
+    };
+    img.onerror = () => resolve(dataUrl);                 // fallback: original
+    img.src = dataUrl;
+  });
+}
+
+/** Convert a File to a resized jpeg data-url (max 300×300). */
+async function processImageFile(file: File, maxSize = 300): Promise<string> {
+  const dataUrl = await readFileAsDataUrl(file);
+  return resizeDataUrl(dataUrl, maxSize);
+}
+
+/* ── sub-components ──────────────────────────────────────────── */
+function SectionCard({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="border-b border-slate-100 px-6 py-4">
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">{description}</p>
+        <p className="mt-0.5 text-sm text-slate-500">{desc}</p>
       </div>
-      <div className="space-y-5 px-6 py-5">{children}</div>
+      <div className="px-6 py-5 space-y-5">{children}</div>
     </div>
   );
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+    <div className="grid gap-3 lg:grid-cols-[200px_1fr] lg:items-start">
       <div className="pt-1">
-        <label className="text-sm font-medium text-slate-700">{label}</label>
+        <p className="text-sm font-medium text-slate-700">{label}</p>
         {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
       </div>
       <div>{children}</div>
@@ -115,211 +171,202 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-500 ${props.className ?? ""}`}
-    />
-  );
+function Inp(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition ${props.className ?? ""}`} />;
+}
+function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...props} className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 transition ${props.className ?? ""}`} />;
+}
+function Txt(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition ${props.className ?? ""}`} />;
 }
 
-function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <textarea
-      {...props}
-      className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-500 ${props.className ?? ""}`}
-    />
-  );
-}
-
-function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      {...props}
-      className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-500 ${props.className ?? ""}`}
-    />
-  );
-}
-
-function ToggleSwitch({ enabled, onChange }: { enabled: boolean; onChange: (value: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!enabled)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${enabled ? "bg-sky-600" : "bg-slate-200"}`}
-    >
-      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${enabled ? "translate-x-6" : "translate-x-1"}`} />
+    <button type="button" onClick={() => onChange(!on)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${on ? "bg-blue-600" : "bg-slate-200"}`}>
+      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
     </button>
   );
 }
 
-function SaveButton({ loading, onClick, label = "Save Changes" }: { loading: boolean; onClick: () => void; label?: string }) {
+function ToggleRow({ title, desc, value, onChange }: { title: string; desc: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="mt-2 flex justify-end border-t border-slate-100 pt-4">
-      <button
-        onClick={onClick}
-        disabled={loading}
-        className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:opacity-60"
-      >
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3">
+      <div>
+        <p className="text-sm font-medium text-slate-900">{title}</p>
+        <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+      </div>
+      <Toggle on={value} onChange={onChange} />
+    </div>
+  );
+}
+
+function SaveBtn({ loading, onClick, label = "Save Changes" }: { loading: boolean; onClick: () => void; label?: string }) {
+  return (
+    <div className="flex justify-end pt-4 border-t border-slate-100">
+      <button onClick={onClick} disabled={loading}
+        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition">
         <Save className="h-4 w-4" />
-        {loading ? "Saving..." : label}
+        {loading ? "Saving…" : label}
       </button>
     </div>
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════ */
 export default function Settings() {
-  const [active, setActive] = useState<Section>("profile");
+  const [active, setActive]         = useState<Section>("profile");
+  const [mobileShowContent, setMobileShowContent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
-  const [settings, setSettings] = useState<StoredSettings>(DEFAULT_SETTINGS);
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [savingSection, setSavingSection] = useState<Section | null>(null);
+  const [prefs, setPrefs]     = useState<UiPrefs>(DEFAULT_PREFS);
+  const [saving, setSaving]   = useState<Section | null>(null);
 
+  /* profile fields */
+  const [fullName,  setFullName]  = useState("");
+  const [phone,     setPhone]     = useState("");
+  const [jobTitle,  setJobTitle]  = useState("");
+  const [bio,       setBio]       = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+
+  /* security */
+  const [newPw,  setNewPw]  = useState("");
+  const [confPw, setConfPw] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /* load */
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       setLoading(true);
+      const { data: sd } = await supabase.auth.getSession();
+      const session = sd.session;
+      if (!session) { setLoading(false); return; }
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData.session;
-
-      if (!session) {
-        toast.error("Session expired. Please log in again.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: profileData, error } = await supabase
+      const { data: p } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role, status")
+        .select("id, full_name, email, role, status, avatar_url, phone, job_title, bio")
         .eq("id", session.user.id)
         .single<ProfileRecord>();
 
-      if (error || !profileData) {
-        toast.error("Unable to load settings.");
-        setLoading(false);
-        return;
+      if (p) {
+        setProfile(p);
+        setFullName(p.full_name ?? "");
+        setPhone(p.phone ?? "");
+        setJobTitle(p.job_title ?? "");
+        setBio(p.bio ?? "");
+        setAvatarUrl(p.avatar_url ?? null);
+        const stored = readPrefs(p.id);
+        setPrefs(stored);
+        applyTheme(stored.theme);
       }
-
-      const stored = readStoredSettings(profileData.id);
-      setProfile(profileData);
-      setSettings(stored);
-      setFullName(profileData.full_name?.trim() || "");
-      setEmail(profileData.email?.trim() || session.user.email || "");
-      applyTheme(stored.theme);
       setLoading(false);
-    };
-
-    load();
+    })();
   }, []);
 
-  useEffect(() => {
-    applyTheme(settings.theme);
-  }, [settings.theme]);
+  useEffect(() => { applyTheme(prefs.theme); }, [prefs.theme]);
 
-  const currentNav = NAV_ITEMS.find((item) => item.key === active) ?? NAV_ITEMS[0];
   const isAdmin = profile?.role === "ADMIN";
+
   const profileCompletion = useMemo(() => {
-    const checks = [fullName.trim().length > 0, email.trim().length > 0, settings.phone.trim().length > 0, settings.avatarDataUrl.length > 0];
+    const checks = [fullName.trim().length > 0, !!profile?.email, phone.trim().length > 0, !!(avatarPreview ?? avatarUrl)];
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  }, [email, fullName, settings.avatarDataUrl, settings.phone]);
+  }, [fullName, profile?.email, phone, avatarPreview, avatarUrl]);
 
-  const updateSettings = (patch: Partial<StoredSettings>) => {
-    setSettings((current) => ({ ...current, ...patch }));
-  };
+  /* avatar pick */
+  const handleAvatarPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    /* reset so the same file can be re-picked after an error */
+    if (fileRef.current) fileRef.current.value = "";
+    if (!file) return;
 
-  const saveStoredSettings = (section: Section, successMessage: string) => {
-    if (!profile) return;
-    setSavingSection(section);
-    const next = { ...settings };
-    persistStoredSettings(profile.id, next);
-    if (section === "appearance") {
-      applyTheme(next.theme);
+    /* HEIC / HEIF from iPhones — browsers can't decode these natively */
+    const isHeic = file.type === "image/heic" || file.type === "image/heif"
+      || file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif");
+    if (isHeic) {
+      toast.error("iPhone HEIC photos aren't supported. Please convert to JPG or PNG first (AirDrop to Mac, then export, or use a free converter).");
+      return;
     }
-    toast.success(successMessage);
-    setSavingSection(null);
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please pick an image file (JPG, PNG, GIF, WebP).");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Photo must be under 10 MB.");
+      return;
+    }
+
+    const toastId = toast.loading("Processing photo…");
+    try {
+      const resized = await processImageFile(file, 400);
+      setAvatarPreview(resized);
+      toast.success("Photo ready — save profile to apply.", { id: toastId });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error(`Could not read image file: ${msg}`, { id: toastId });
+    }
   };
 
+  /* save profile */
   const saveProfile = async () => {
     if (!profile) return;
-    if (!fullName.trim()) {
-      toast.error("Full name is required.");
-      return;
-    }
+    if (!fullName.trim()) { toast.error("Full name is required."); return; }
+    setSaving("profile");
 
-    setSavingSection("profile");
-
-    const { error } = await supabase.from("profiles").update({ full_name: fullName.trim() }).eq("id", profile.id);
-    if (error) {
-      toast.error(error.message);
-      setSavingSection(null);
-      return;
-    }
-
-    persistStoredSettings(profile.id, settings);
-    setProfile((current) => (current ? { ...current, full_name: fullName.trim() } : current));
-    toast.success("Profile updated.");
-    setSavingSection(null);
-  };
-
-  const saveSecurity = async () => {
-    if (newPassword.length < 8) {
-      toast.error("New password must be at least 8 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error("Password confirmation does not match.");
-      return;
-    }
-
-    setSavingSection("security");
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      toast.error(error.message);
-      setSavingSection(null);
-      return;
-    }
-
-    setNewPassword("");
-    setConfirmPassword("");
-    toast.success("Password updated.");
-    setSavingSection(null);
-  };
-
-  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please upload an image file.");
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Profile photos must be under 2MB.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      updateSettings({ avatarDataUrl: result });
-      toast.success("Profile photo ready. Save profile to keep it.");
+    const patch: Record<string, unknown> = {
+      full_name: fullName.trim(),
+      phone:     phone.trim()    || null,
+      job_title: jobTitle.trim() || null,
+      bio:       bio.trim()      || null,
     };
-    reader.readAsDataURL(file);
+    if (avatarPreview) patch.avatar_url = avatarPreview;
+
+    const { error } = await supabase.from("profiles").update(patch).eq("id", profile.id);
+    if (error) { toast.error(error.message); setSaving(null); return; }
+
+    if (avatarPreview) setAvatarUrl(avatarPreview);
+    setAvatarPreview(null);
+    setProfile((p) => p ? { ...p, full_name: fullName.trim(), phone: phone.trim() || null, job_title: jobTitle.trim() || null, bio: bio.trim() || null, avatar_url: avatarPreview ?? p.avatar_url } : p);
+    toast.success("Profile saved!");
+    setSaving(null);
   };
+
+  /* save UI prefs */
+  const saveUiPrefs = (section: Section, msg: string, patch?: Partial<UiPrefs>) => {
+    if (!profile) return;
+    setSaving(section);
+    const next = patch ? { ...prefs, ...patch } : prefs;
+    setPrefs(next);
+    savePrefs(profile.id, next);
+    if (section === "appearance") applyTheme(next.theme);
+    toast.success(msg);
+    setSaving(null);
+  };
+
+  /* save password */
+  const savePassword = async () => {
+    if (newPw.length < 8) { toast.error("Password must be at least 8 characters."); return; }
+    if (newPw !== confPw) { toast.error("Passwords do not match."); return; }
+    setSaving("security");
+    const { error } = await supabase.auth.updateUser({ password: newPw });
+    if (error) { toast.error(error.message); setSaving(null); return; }
+    setNewPw(""); setConfPw("");
+    toast.success("Password updated.");
+    setSaving(null);
+  };
+
+  const displayAvatar = avatarPreview ?? avatarUrl;
+  const displayName   = fullName || profile?.full_name || "Team Member";
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-100 p-8">
-        <div className="space-y-5 animate-pulse">
-          <div className="h-10 w-48 rounded-xl bg-slate-200" />
-          <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-            <div className="h-96 rounded-2xl bg-white" />
-            <div className="h-144 rounded-2xl bg-white" />
-          </div>
+      <div className="min-h-screen bg-slate-50 p-8 animate-pulse space-y-5">
+        <div className="h-36 rounded-2xl bg-slate-200" />
+        <div className="grid gap-5 xl:grid-cols-[280px_1fr]">
+          <div className="h-96 rounded-2xl bg-slate-200" />
+          <div className="h-96 rounded-2xl bg-slate-200" />
         </div>
       </div>
     );
@@ -327,459 +374,349 @@ export default function Settings() {
 
   if (!profile) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 p-8">
-        <div className="rounded-2xl border border-rose-200 bg-white px-6 py-5 text-sm text-rose-700 shadow-sm">
-          Unable to load your settings.
-        </div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-5 py-3">Unable to load settings.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6 xl:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-sky-900 p-6 text-white shadow-lg md:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm text-slate-300">Account Control Centre</p>
-              <h1 className="mt-1 text-2xl font-bold md:text-3xl">Settings</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-200 md:text-base">
-                Manage profile details, profile photos, theme preferences, job workflow defaults, security, and legal acknowledgements for the operations portal.
-              </p>
+    <div className="min-h-screen bg-slate-50">
+
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <div className="bg-linear-to-br from-slate-900 via-slate-800 to-blue-950 text-white px-6 py-8 md:px-10">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center gap-6">
+          {/* Avatar preview */}
+          <div className="relative shrink-0">
+            <div className="h-20 w-20 rounded-2xl overflow-hidden shadow-lg">
+              {displayAvatar
+                ? <img src={displayAvatar} alt={displayName} className="h-full w-full object-cover" />
+                : <div className={`h-full w-full flex items-center justify-center text-white text-xl font-bold ${avatarBg(displayName)}`}>{getInitials(displayName)}</div>
+              }
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <TopStat label="Role" value={humanize(profile.role)} icon={<ShieldCheck className="h-4 w-4" />} />
-              <TopStat label="Status" value={profile.status?.toUpperCase() || "ACTIVE"} icon={<CheckCircle2 className="h-4 w-4" />} />
-              <TopStat label="Theme" value={humanize(settings.theme)} icon={<Palette className="h-4 w-4" />} />
-              <TopStat label="Profile" value={`${profileCompletion}%`} icon={<UserCircle2 className="h-4 w-4" />} />
-            </div>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="absolute -bottom-1.5 -right-1.5 h-7 w-7 rounded-full bg-blue-500 hover:bg-blue-600 border-2 border-slate-900 flex items-center justify-center transition"
+              title="Change photo"
+            >
+              <Camera className="h-3.5 w-3.5 text-white" />
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarPick} />
           </div>
-        </section>
 
-        <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="space-y-5">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 px-5 py-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Account</p>
-              </div>
-              <div className="px-5 py-5">
-                <div className="flex items-center gap-4">
-                  <Avatar fullName={fullName || profile.full_name || profile.email || "User"} avatarDataUrl={settings.avatarDataUrl} />
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-900">{fullName || profile.full_name || "Team Member"}</p>
-                    <p className="truncate text-sm text-slate-500">{email}</p>
-                    <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">{humanize(profile.role)}</p>
-                  </div>
-                </div>
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Profile completion</span>
-                    <span className="font-semibold text-slate-900">{profileCompletion}%</span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
-                    <div className="h-full rounded-full bg-sky-600" style={{ width: `${profileCompletion}%` }} />
-                  </div>
-                </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Account Settings</p>
+            <h1 className="text-2xl md:text-3xl font-extrabold mt-1">{displayName}</h1>
+            <p className="text-sm text-slate-300 mt-0.5">{profile.email} · <span className="capitalize">{humanize(profile.role)}</span></p>
+          </div>
+
+          {/* Completion ring */}
+          <div className="shrink-0 flex flex-col items-center gap-1">
+            <div className="relative h-16 w-16">
+              <svg viewBox="0 0 36 36" className="rotate-[-90deg] h-16 w-16">
+                <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3" />
+                <circle cx="18" cy="18" r="15" fill="none" stroke={profileCompletion === 100 ? "#34d399" : "#60a5fa"}
+                  strokeWidth="3" strokeLinecap="round"
+                  strokeDasharray={`${(profileCompletion / 100) * 94.2} 94.2`} />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-xs font-bold text-white">{profileCompletion}%</span>
               </div>
             </div>
+            <p className="text-xs text-slate-400">Profile</p>
+          </div>
+        </div>
+      </div>
 
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <nav className="p-2">
-                {NAV_ITEMS.map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => setActive(item.key)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition ${
-                      active === item.key ? "bg-sky-50 text-sky-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                    }`}
-                  >
-                    <span className={active === item.key ? "text-sky-600" : "text-slate-400"}>{item.icon}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{item.label}</p>
-                      <p className="truncate text-xs text-slate-400">{item.description}</p>
-                    </div>
-                    <ChevronRight className={`h-4 w-4 ${active === item.key ? "text-sky-400" : "text-slate-300"}`} />
-                  </button>
-                ))}
-              </nav>
-            </div>
+      <div className="max-w-6xl mx-auto px-4 md:px-8 py-6">
+
+        {/* ── Mobile menu list (shown when no section is open) ─── */}
+        <div className={`xl:hidden space-y-2 ${mobileShowContent ? "hidden" : "block"}`}>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 px-1 mb-3">Settings</p>
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => { setActive(item.key); setMobileShowContent(true); }}
+              className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all text-left"
+            >
+              <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                {item.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
+            </button>
+          ))}
+        </div>
+
+        {/* ── Main layout: side nav (desktop) + content ────────── */}
+        <div className={`xl:grid xl:grid-cols-[240px_1fr] xl:gap-6 ${mobileShowContent ? "block" : "hidden xl:grid"}`}>
+
+          {/* Desktop side nav */}
+          <aside className="hidden xl:block space-y-2">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setActive(item.key)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
+                  active === item.key
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-white border border-slate-100 text-slate-600 hover:bg-slate-50 shadow-sm"
+                }`}
+              >
+                <span className={active === item.key ? "text-blue-100" : "text-slate-400"}>{item.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{item.label}</p>
+                  <p className={`text-xs truncate ${active === item.key ? "text-blue-200" : "text-slate-400"}`}>{item.desc}</p>
+                </div>
+                <ChevronRight className={`h-4 w-4 shrink-0 ${active === item.key ? "text-blue-200" : "text-slate-300"}`} />
+              </button>
+            ))}
           </aside>
 
-          <div className="min-w-0 space-y-4">
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <span>Settings</span>
-              <ChevronRight className="h-4 w-4" />
-              <span className="font-medium text-slate-900">{currentNav.label}</span>
+          {/* ── Content ────────────────────────────────────────── */}
+          <div className="space-y-4 min-w-0">
+
+            {/* Mobile breadcrumb / back button */}
+            <div className="xl:hidden flex items-center gap-2 pb-1">
+              <button
+                onClick={() => setMobileShowContent(false)}
+                className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Settings
+              </button>
+              <span className="text-slate-300">/</span>
+              <span className="text-sm font-semibold text-slate-700">
+                {NAV_ITEMS.find((i) => i.key === active)?.label}
+              </span>
             </div>
 
+            {/* PROFILE */}
             {active === "profile" && (
-              <SectionCard title="Profile & Identity" description="Keep your contact details, role identity, and profile photo current.">
-                <Field label="Profile Photo" hint="Shown in account summaries and future activity feeds.">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                    <Avatar fullName={fullName || profile.full_name || profile.email || "User"} avatarDataUrl={settings.avatarDataUrl} large />
+              <SectionCard title="Profile & Identity" desc="Your details appear in the People directory and job assignments.">
+
+                {/* Photo upload */}
+                <Field label="Profile Photo" hint="PNG or JPG, max 5 MB — saved across all devices.">
+                  <div className="flex items-center gap-4">
+                    <div className="h-20 w-20 rounded-2xl overflow-hidden border-2 border-slate-200 shrink-0">
+                      {displayAvatar
+                        ? <img src={displayAvatar} alt={displayName} className="h-full w-full object-cover" />
+                        : <div className={`h-full w-full flex items-center justify-center text-white text-lg font-bold ${avatarBg(displayName)}`}>{getInitials(displayName)}</div>
+                      }
+                    </div>
                     <div>
-                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-                        <Upload className="h-4 w-4" />
-                        Upload Photo
-                        <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-                      </label>
-                      <p className="mt-2 text-xs text-slate-400">PNG or JPG up to 2MB. Stored locally for this account profile.</p>
+                      <button
+                        onClick={() => fileRef.current?.click()}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition"
+                      >
+                        <Camera className="h-4 w-4" />
+                        {displayAvatar ? "Change Photo" : "Upload Photo"}
+                      </button>
+                      {avatarPreview && (
+                        <p className="text-xs text-amber-600 mt-1.5">New photo ready — save to apply.</p>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">Shown in People directory and job cards.</p>
                     </div>
                   </div>
                 </Field>
 
-                <Field label="Full Name" hint="Displayed in dashboards, schedules, and approvals.">
-                  <Input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Enter your full name" />
+                <Field label="Full Name" hint="Displayed in schedules, approvals, and the People page.">
+                  <Inp value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your full name" />
                 </Field>
 
-                <Field label="Email Address" hint="Used for login and operations email alerts.">
-                  <Input value={email} onChange={(event) => setEmail(event.target.value)} disabled className="bg-slate-50 text-slate-500" />
+                <Field label="Email" hint="Login email — cannot be changed here.">
+                  <Inp value={profile.email ?? ""} disabled className="opacity-60 cursor-not-allowed" />
                 </Field>
 
-                <Field label="Phone Number" hint="Emergency contact or dispatch callback.">
-                  <Input value={settings.phone} onChange={(event) => updateSettings({ phone: event.target.value })} placeholder="+61 4 0000 0000" />
+                <Field label="Phone" hint="Used for dispatch callbacks and emergency contact.">
+                  <Inp value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+61 4 0000 0000" />
                 </Field>
 
-                <Field label="Job Title" hint="Examples: Operations Manager, Field Technician, Scheduler.">
-                  <Input value={settings.jobTitle} onChange={(event) => updateSettings({ jobTitle: event.target.value })} placeholder="Operations Manager" />
+                <Field label="Job Title" hint="e.g. Operations Manager, Field Technician.">
+                  <Inp value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="Field Technician" />
                 </Field>
 
-                <Field label="Bio" hint="Short internal note about responsibilities or coverage.">
-                  <Textarea
-                    rows={4}
-                    value={settings.bio}
-                    onChange={(event) => updateSettings({ bio: event.target.value })}
-                    placeholder="Managing Sydney CBD escalator cleaning schedules and team readiness."
-                  />
+                <Field label="Bio" hint="Short internal note about your role or responsibilities.">
+                  <Txt rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Managing Sydney CBD escalator cleaning schedules…" />
                 </Field>
 
-                <SaveButton loading={savingSection === "profile"} onClick={saveProfile} />
+                {/* Profile preview card */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Preview — how you appear in People</p>
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-xl overflow-hidden shrink-0">
+                      {displayAvatar
+                        ? <img src={displayAvatar} alt={displayName} className="h-full w-full object-cover" />
+                        : <div className={`h-full w-full flex items-center justify-center text-white text-sm font-bold ${avatarBg(displayName)}`}>{getInitials(displayName)}</div>
+                      }
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{displayName}</p>
+                      <p className="text-xs text-slate-400">{profile.email} {jobTitle ? `· ${jobTitle}` : ""}</p>
+                    </div>
+                    <span className="ml-auto text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                      {humanize(profile.role)}
+                    </span>
+                  </div>
+                </div>
+
+                <SaveBtn loading={saving === "profile"} onClick={saveProfile} />
               </SectionCard>
             )}
 
+            {/* APPEARANCE */}
             {active === "appearance" && (
-              <SectionCard title="Appearance & Theme" description="Choose how the portal feels during dispatch, planning, and reporting.">
-                <Field label="Theme" hint="Applies immediately and is saved for your account in this browser.">
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    {THEME_OPTIONS.map((option) => {
-                      const selected = settings.theme === option.key;
+              <SectionCard title="Appearance" desc="Choose how the portal looks during dispatch, planning, and reporting.">
+                <Field label="Theme" hint="Applies immediately across all pages.">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {THEME_OPTIONS.map((opt) => {
+                      const sel = prefs.theme === opt.key;
                       return (
-                        <button
-                          key={option.key}
-                          onClick={() => updateSettings({ theme: option.key })}
-                          className={`rounded-2xl border p-4 text-left transition ${selected ? "border-sky-500 ring-2 ring-sky-200" : "border-slate-200 hover:border-slate-300"}`}
-                        >
-                          <div className={`h-20 rounded-xl bg-linear-to-br ${option.swatch}`} />
-                          <div className="mt-3 flex items-center gap-2 text-slate-900">
-                            {option.icon}
-                            <span className="font-medium">{option.label}</span>
+                        <button key={opt.key} onClick={() => setPrefs((p) => ({ ...p, theme: opt.key }))}
+                          className={`rounded-2xl border p-3 text-left transition ${sel ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200 hover:border-slate-300 bg-white"}`}>
+                          <div className={`h-16 rounded-xl bg-linear-to-br ${opt.swatch}`} />
+                          <div className="mt-2 flex items-center gap-1.5 text-sm font-medium text-slate-800">
+                            {opt.icon}{opt.label}
                           </div>
-                          <p className="mt-1 text-sm text-slate-500">{option.description}</p>
                         </button>
                       );
                     })}
                   </div>
                 </Field>
-
-                <Field label="Compact Interface" hint="Reduce spacing in tables and cards to fit more operational data onscreen.">
-                  <div className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">Enable compact layout</p>
-                      <p className="text-xs text-slate-500">Useful for dispatch monitors and smaller laptop screens.</p>
-                    </div>
-                    <ToggleSwitch enabled={settings.compactMode} onChange={(value) => updateSettings({ compactMode: value })} />
-                  </div>
-                </Field>
-
-                <SaveButton loading={savingSection === "appearance"} onClick={() => saveStoredSettings("appearance", "Appearance preferences saved.")} />
+                <ToggleRow title="Compact Interface" desc="Reduce spacing in tables and cards to fit more data onscreen."
+                  value={prefs.compactMode} onChange={(v) => setPrefs((p) => ({ ...p, compactMode: v }))} />
+                <SaveBtn loading={saving === "appearance"} onClick={() => saveUiPrefs("appearance", "Appearance saved.")} />
               </SectionCard>
             )}
 
+            {/* NOTIFICATIONS */}
             {active === "notifications" && (
-              <SectionCard title="Notifications" description="Control the alerts and reminders you receive from the operations workflow.">
-                <ToggleRow
-                  title="Daily Email Digest"
-                  description="Receive one summary email for jobs, overdue tasks, and approvals."
-                  value={settings.emailDigest}
-                  onChange={(value) => updateSettings({ emailDigest: value })}
-                />
-                <ToggleRow
-                  title="Push Alerts"
-                  description="Show in-app alerts when schedules change or jobs are assigned."
-                  value={settings.pushAlerts}
-                  onChange={(value) => updateSettings({ pushAlerts: value })}
-                />
-                <ToggleRow
-                  title="SMS Alerts"
-                  description="Use SMS only for urgent dispatch changes and access issues."
-                  value={settings.smsAlerts}
-                  onChange={(value) => updateSettings({ smsAlerts: value })}
-                />
-                <ToggleRow
-                  title="Report Reminder"
-                  description="Prompt users to finish reports at the end of a shift."
-                  value={settings.reportReminder}
-                  onChange={(value) => updateSettings({ reportReminder: value })}
-                />
-
+              <SectionCard title="Notifications" desc="Control alerts and reminders from the operations workflow.">
+                <ToggleRow title="Daily Email Digest" desc="One summary email per day covering jobs, overdue tasks, and approvals."
+                  value={prefs.emailDigest} onChange={(v) => setPrefs((p) => ({ ...p, emailDigest: v }))} />
+                <ToggleRow title="Push Alerts" desc="In-app alerts when schedules change or jobs are assigned."
+                  value={prefs.pushAlerts} onChange={(v) => setPrefs((p) => ({ ...p, pushAlerts: v }))} />
+                <ToggleRow title="SMS Alerts" desc="Urgent dispatch changes and access issues via SMS."
+                  value={prefs.smsAlerts} onChange={(v) => setPrefs((p) => ({ ...p, smsAlerts: v }))} />
+                <ToggleRow title="Report Reminder" desc="Prompt at end of shift to finish any incomplete reports."
+                  value={prefs.reportReminder} onChange={(v) => setPrefs((p) => ({ ...p, reportReminder: v }))} />
                 {isAdmin && (
-                  <Field label="Reply-To Address" hint="Admin communication inbox for system-generated emails.">
-                    <Input value={settings.replyTo} onChange={(event) => updateSettings({ replyTo: event.target.value })} placeholder="ops@statewide.example" />
+                  <Field label="Reply-To Address" hint="Admin inbox for system-generated emails.">
+                    <Inp value={prefs.replyTo} onChange={(e) => setPrefs((p) => ({ ...p, replyTo: e.target.value }))} />
                   </Field>
                 )}
-
-                <SaveButton loading={savingSection === "notifications"} onClick={() => saveStoredSettings("notifications", "Notification settings saved.")} />
+                <SaveBtn loading={saving === "notifications"} onClick={() => saveUiPrefs("notifications", "Notification preferences saved.")} />
               </SectionCard>
             )}
 
+            {/* OPERATIONS */}
             {active === "operations" && (
-              <SectionCard
-                title={isAdmin ? "Operations Defaults" : "Work Preferences"}
-                description="Tune the defaults that match escalator cleaning workflows, route planning, and reporting."
-              >
-                <Field label="Default Shift" hint="Used to preselect shift context in future scheduling flows.">
-                  <Select
-                    value={settings.defaultShift}
-                    onChange={(event) => updateSettings({ defaultShift: event.target.value as StoredSettings["defaultShift"] })}
-                  >
-                    <option value="Morning">Morning</option>
-                    <option value="Midday">Midday</option>
-                    <option value="Night">Night</option>
-                  </Select>
+              <SectionCard title={isAdmin ? "Operations Defaults" : "Work Preferences"} desc="Tune defaults for scheduling, route planning, and reporting.">
+                <Field label="Default Shift" hint="Preselects shift context in scheduling flows.">
+                  <Sel value={prefs.defaultShift} onChange={(e) => setPrefs((p) => ({ ...p, defaultShift: e.target.value as UiPrefs["defaultShift"] }))}>
+                    <option>Morning</option><option>Midday</option><option>Night</option>
+                  </Sel>
                 </Field>
-
-                <Field label="Travel Buffer" hint="Buffer between jobs to account for access setup and travel.">
-                  <Select
-                    value={String(settings.travelBufferMinutes)}
-                    onChange={(event) => updateSettings({ travelBufferMinutes: Number(event.target.value) })}
-                  >
+                <Field label="Travel Buffer" hint="Buffer between jobs for access setup and transit.">
+                  <Sel value={String(prefs.travelBufferMinutes)} onChange={(e) => setPrefs((p) => ({ ...p, travelBufferMinutes: Number(e.target.value) }))}>
                     <option value="10">10 minutes</option>
                     <option value="20">20 minutes</option>
                     <option value="30">30 minutes</option>
                     <option value="45">45 minutes</option>
-                  </Select>
+                  </Sel>
                 </Field>
-
-                <ToggleRow
-                  title="Pre-start Checklist Required"
-                  description="Require a site readiness check before a team can mark a job in progress."
-                  value={settings.preStartChecklist}
-                  onChange={(value) => updateSettings({ preStartChecklist: value })}
-                />
-
+                <ToggleRow title="Pre-start Checklist Required" desc="Require a site readiness check before marking a job in progress."
+                  value={prefs.preStartChecklist} onChange={(v) => setPrefs((p) => ({ ...p, preStartChecklist: v }))} />
                 {isAdmin && (
                   <>
-                    <Field label="Email Sender Name" hint="Visible in admin approval emails and report notifications.">
-                      <Input value={settings.senderName} onChange={(event) => updateSettings({ senderName: event.target.value })} />
+                    <Field label="Email Sender Name" hint="Name shown in admin approval and notification emails.">
+                      <Inp value={prefs.senderName} onChange={(e) => setPrefs((p) => ({ ...p, senderName: e.target.value }))} />
                     </Field>
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <MetricCard title="Response Target" value="15 min" description="Average callback target for access issues" icon={<Clock3 className="h-4 w-4" />} />
-                      <MetricCard title="Field Teams" value="8" description="Current active crews expected this week" icon={<Users className="h-4 w-4" />} />
-                      <MetricCard title="Compliance" value="98%" description="Recent SWMS and pre-start completion" icon={<ShieldCheck className="h-4 w-4" />} />
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {[
+                        { label: "Response Target", value: "15 min", note: "Avg callback target for access issues", icon: <Clock3 className="h-4 w-4" /> },
+                        { label: "Field Teams", value: "8", note: "Active crews expected this week", icon: <Users className="h-4 w-4" /> },
+                        { label: "Compliance", value: "98%", note: "SWMS and pre-start completion rate", icon: <ShieldCheck className="h-4 w-4" /> },
+                      ].map((m) => (
+                        <div key={m.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="flex items-center justify-between text-slate-400">{m.icon}<span className="text-xs uppercase tracking-wide font-semibold">{m.label}</span></div>
+                          <p className="mt-2 text-2xl font-bold text-slate-900">{m.value}</p>
+                          <p className="text-xs text-slate-500 mt-1">{m.note}</p>
+                        </div>
+                      ))}
                     </div>
                   </>
                 )}
-
-                <SaveButton loading={savingSection === "operations"} onClick={() => saveStoredSettings("operations", "Operations defaults saved.")} />
+                <SaveBtn loading={saving === "operations"} onClick={() => saveUiPrefs("operations", "Operations defaults saved.")} />
               </SectionCard>
             )}
 
+            {/* SECURITY */}
             {active === "security" && (
-              <SectionCard title="Security" description="Keep credentials current and keep account access under control.">
-                <Field label="Password" hint="Update the password for your portal login.">
+              <SectionCard title="Security" desc="Keep your credentials current and your account protected.">
+                <Field label="Change Password" hint="Must be at least 8 characters.">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="New password" />
-                    <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Confirm new password" />
+                    <Inp type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="New password" />
+                    <Inp type="password" value={confPw} onChange={(e) => setConfPw(e.target.value)} placeholder="Confirm password" />
                   </div>
                 </Field>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <StatusCard title="Email Login" value="Enabled" detail="Password-based auth is active for this account." />
-                  <StatusCard title="Approval State" value={profile.status ?? "ACTIVE"} detail="Account access is controlled through admin approval." />
-                  <StatusCard title="Session" value="Protected" detail="Protected routes require an active verified session." />
+                <div className="grid gap-3 md:grid-cols-3">
+                  {[
+                    { label: "Auth Method", value: "Email / Password", note: "Password-based login is active." },
+                    { label: "Account Status", value: profile.status ?? "ACTIVE", note: "Controlled by admin approval." },
+                    { label: "Session", value: "Protected", note: "Active verified session required." },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs uppercase tracking-wide font-semibold text-slate-400">{s.label}</p>
+                      <p className="mt-1.5 font-semibold text-slate-900">{s.value}</p>
+                      <p className="text-xs text-slate-500 mt-1">{s.note}</p>
+                    </div>
+                  ))}
                 </div>
-
-                <SaveButton loading={savingSection === "security"} onClick={saveSecurity} label="Update Password" />
+                <SaveBtn loading={saving === "security"} onClick={savePassword} label="Update Password" />
               </SectionCard>
             )}
 
+            {/* LEGAL */}
             {active === "legal" && (
-              <SectionCard title="Terms, Privacy & Compliance" description="Keep the app aligned with field safety, privacy, and employee obligations.">
+              <SectionCard title="Terms, Privacy & Compliance" desc="Keep the app aligned with field safety, privacy, and obligations.">
                 <div className="grid gap-4 md:grid-cols-3">
-                  <LegalCard
-                    title="Terms & Conditions"
-                    description="Use of the portal must follow company scheduling, reporting, and access-control rules."
-                    checked={settings.termsAccepted}
-                    onChange={(value) => updateSettings({ termsAccepted: value })}
-                  />
-                  <LegalCard
-                    title="Privacy Notice"
-                    description="User profile data, site notes, and schedule history are used for operational delivery and auditing."
-                    checked={settings.privacyAccepted}
-                    onChange={(value) => updateSettings({ privacyAccepted: value })}
-                  />
-                  <LegalCard
-                    title="Safety Commitment"
-                    description="Teams must complete pre-start checks, use PPE, and log site hazards before commencing work."
-                    checked={settings.safetyAccepted}
-                    onChange={(value) => updateSettings({ safetyAccepted: value })}
-                  />
+                  {[
+                    { key: "termsAccepted",   title: "Terms & Conditions", desc: "Use of the portal must follow company scheduling, reporting, and access-control rules." },
+                    { key: "privacyAccepted", title: "Privacy Notice",     desc: "Profile data, site notes, and schedule history are used for operational delivery and auditing." },
+                    { key: "safetyAccepted",  title: "Safety Commitment",  desc: "Teams must complete pre-start checks, use PPE, and log site hazards before commencing work." },
+                  ].map((card) => (
+                    <div key={card.key} className="rounded-xl border border-slate-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{card.title}</p>
+                          <p className="text-xs text-slate-500 mt-1">{card.desc}</p>
+                        </div>
+                        <Toggle on={prefs[card.key as keyof UiPrefs] as boolean}
+                          onChange={(v) => setPrefs((p) => ({ ...p, [card.key]: v }))} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <h3 className="font-medium text-slate-900">Operational Terms Summary</h3>
-                  <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-600 space-y-2">
+                  <p className="font-medium text-slate-800">Operational Terms Summary</p>
+                  <ul className="space-y-1 text-xs list-disc list-inside text-slate-500">
                     <li>Schedule data must only be used for approved work allocation and client communication.</li>
-                    <li>Profile photos are for internal identification and must not be reused outside the platform.</li>
-                    <li>Incident, SWMS, and pre-start records should be completed on the day of service for compliance accuracy.</li>
-                    <li>Admins are responsible for removing disabled users and maintaining active approval lists.</li>
+                    <li>Profile photos are for internal identification only.</li>
+                    <li>SWMS and pre-start records must be completed on the day of service.</li>
+                    <li>Admins must maintain accurate active approval lists.</li>
                   </ul>
                 </div>
-
-                <SaveButton loading={savingSection === "legal"} onClick={() => saveStoredSettings("legal", "Legal acknowledgements saved.")} />
+                <SaveBtn loading={saving === "legal"} onClick={() => saveUiPrefs("legal", "Legal acknowledgements saved.")} />
               </SectionCard>
             )}
+
           </div>
         </div>
       </div>
     </div>
   );
-}
-
-function TopStat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-slate-200">
-        {icon}
-        <span className="text-xs uppercase tracking-wide">{label}</span>
-      </div>
-      <p className="mt-2 text-lg font-bold text-white">{value}</p>
-    </div>
-  );
-}
-
-function Avatar({ fullName, avatarDataUrl, large = false }: { fullName: string; avatarDataUrl: string; large?: boolean }) {
-  const size = large ? "h-24 w-24 text-2xl" : "h-16 w-16 text-lg";
-  if (avatarDataUrl) {
-    return <img src={avatarDataUrl} alt={fullName} className={`${size} rounded-2xl object-cover`} />;
-  }
-  return (
-    <div className={`${size} flex items-center justify-center rounded-2xl bg-sky-100 font-bold text-sky-700`}>
-      {getInitials(fullName)}
-    </div>
-  );
-}
-
-function ToggleRow({
-  title,
-  description,
-  value,
-  onChange,
-}: {
-  title: string;
-  description: string;
-  value: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 px-4 py-3">
-      <div>
-        <p className="text-sm font-medium text-slate-900">{title}</p>
-        <p className="text-xs text-slate-500">{description}</p>
-      </div>
-      <ToggleSwitch enabled={value} onChange={onChange} />
-    </div>
-  );
-}
-
-function MetricCard({ title, value, description, icon }: { title: string; value: string; description: string; icon: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-center justify-between text-slate-500">
-        <span className="text-xs font-semibold uppercase tracking-wide">{title}</span>
-        {icon}
-      </div>
-      <p className="mt-3 text-2xl font-bold text-slate-900">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{description}</p>
-    </div>
-  );
-}
-
-function StatusCard({ title, value, detail }: { title: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
-      <p className="mt-2 font-semibold text-slate-900">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{detail}</p>
-    </div>
-  );
-}
-
-function LegalCard({
-  title,
-  description,
-  checked,
-  onChange,
-}: {
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="font-medium text-slate-900">{title}</h3>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
-        </div>
-        <ToggleSwitch enabled={checked} onChange={onChange} />
-      </div>
-    </div>
-  );
-}
-
-function getInitials(value: string) {
-  return value
-    .split(" ")
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-function readStoredSettings(userId: string): StoredSettings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
-  const raw = window.localStorage.getItem(storageKey(userId));
-  if (!raw) return DEFAULT_SETTINGS;
-
-  try {
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<StoredSettings>) };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
-function persistStoredSettings(userId: string, settings: StoredSettings) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(storageKey(userId), JSON.stringify(settings));
-}
-
-function storageKey(userId: string) {
-  return `ops-settings:${userId}`;
-}
-
-function applyTheme(theme: ThemeOption) {
-  if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  root.setAttribute("data-ops-theme", theme);
-}
-
-function humanize(value: string) {
-  return value
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }

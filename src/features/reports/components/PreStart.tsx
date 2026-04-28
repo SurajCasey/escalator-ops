@@ -14,146 +14,219 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
-function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+function YesNoRow({
+  label,
+  value,
+  onChange,
+  flagOnYes = true,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (next: boolean) => void;
+  flagOnYes?: boolean;
+}) {
+  const isYes = value;
+  const isNo = !value;
+  const yesBg = flagOnYes ? (isYes ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-600") : (isYes ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-600");
+  void isNo; // used implicitly by the No button below
+
   return (
-    <textarea
-      {...props}
-      className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-500 ${props.className ?? ""}`}
-    />
+    <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+      <p className="flex-1 text-sm font-medium text-slate-800 leading-5">{label}</p>
+      <div className="flex gap-1.5 shrink-0">
+        <button
+          type="button"
+          onClick={() => onChange(true)}
+          className={`min-w-12 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${yesBg}`}
+        >
+          Yes
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(false)}
+          className={`min-w-12 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${isNo ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-600"}`}
+        >
+          No
+        </button>
+      </div>
+    </div>
   );
 }
 
-function CheckRow({
-  label,
-  hint,
-  checked,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}) {
+function SectionHeader({ label, score }: { label: string; score: string }) {
   return (
-    <label className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 px-4 py-3">
-      <div>
-        <p className="text-sm font-medium text-slate-900">{label}</p>
-        <p className="text-xs text-slate-500">{hint}</p>
-      </div>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
-    </label>
+    <div className="flex items-center justify-between rounded-2xl bg-slate-800 px-4 py-2.5">
+      <span className="text-sm font-bold uppercase tracking-wide text-white">{label}</span>
+      <span className="text-xs font-semibold text-slate-300">{score}</span>
+    </div>
   );
 }
 
 export default function PreStart({ formData, onChange }: Props) {
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Document Date</label>
-          <Input type="date" value={formData.documentDate} onChange={(event) => onChange({ documentDate: event.target.value })} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Crew Names</label>
-          <Input value={formData.crewNames} onChange={(event) => onChange({ crewNames: event.target.value })} placeholder="A. Patel, S. Brown" />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Prepared By</label>
-          <Input value={formData.preparedBy} onChange={(event) => onChange({ preparedBy: event.target.value })} placeholder="Crew leader name" />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Supervisor</label>
-          <Input value={formData.supervisorName} onChange={(event) => onChange({ supervisorName: event.target.value })} placeholder="Site or operations supervisor" />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Start Time</label>
-          <Input type="time" value={formData.startTime} onChange={(event) => onChange({ startTime: event.target.value })} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Finish Time</label>
-          <Input type="time" value={formData.finishTime} onChange={(event) => onChange({ finishTime: event.target.value })} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Weather</label>
-          <Input value={formData.weather} onChange={(event) => onChange({ weather: event.target.value })} placeholder="Clear, mild wind" />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Emergency Contact</label>
-          <Input value={formData.emergencyContact} onChange={(event) => onChange({ emergencyContact: event.target.value })} placeholder="Site control room / supervisor" />
-        </div>
-        <div className="lg:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-slate-700">Equipment Used</label>
-          <Input value={formData.equipmentUsed} onChange={(event) => onChange({ equipmentUsed: event.target.value })} placeholder="Cones, wet floor signs, PPE kits, cleaning tools" />
+    <div className="space-y-6">
+
+      {/* ── Cover / Summary ───────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+        <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Cover Details</h3>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Site Location</label>
+            <Input
+              value={formData.preStartSiteLocation}
+              onChange={(e) => onChange({ preStartSiteLocation: e.target.value })}
+              placeholder="e.g. Chatswood RSL"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Date</label>
+            <Input
+              type="date"
+              value={formData.documentDate}
+              onChange={(e) => onChange({ documentDate: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Prepared By</label>
+            <Input
+              value={formData.preparedBy}
+              onChange={(e) => onChange({ preparedBy: e.target.value })}
+              placeholder="Your full name"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Start Time (AEST)</label>
+            <Input
+              type="time"
+              value={formData.startTime}
+              onChange={(e) => onChange({ startTime: e.target.value })}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <CheckRow
-          label="Site Access Confirmed"
-          hint="Keys, permits, or security access are ready before work starts."
-          checked={formData.siteAccessConfirmed}
-          onChange={(next) => onChange({ siteAccessConfirmed: next })}
-        />
-        <CheckRow
-          label="Isolation Required"
-          hint="Confirm whether lockout or site isolation is required."
-          checked={formData.isolationRequired}
-          onChange={(next) => onChange({ isolationRequired: next })}
-        />
-        <CheckRow
-          label="PPE Checked"
-          hint="Crew has correct PPE for the site and task."
-          checked={formData.ppeChecked}
-          onChange={(next) => onChange({ ppeChecked: next })}
-        />
-        <CheckRow
-          label="Tools Checked"
-          hint="Tools and cleaning gear inspected before use."
-          checked={formData.toolsChecked}
-          onChange={(next) => onChange({ toolsChecked: next })}
-        />
-        <CheckRow
-          label="Permits Confirmed"
-          hint="Required permits or approvals have been checked before work starts."
-          checked={formData.permitsConfirmed}
-          onChange={(next) => onChange({ permitsConfirmed: next })}
+      {/* ── Prestart Audit ────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <SectionHeader label="Prestart Audit" score="1 / 1 (100%)" />
+
+        <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+          <p className="flex-1 text-sm font-medium text-slate-800 leading-5">What type(s) of works are you performing?</p>
+          <Input
+            value={formData.preStartWorkType}
+            onChange={(e) => onChange({ preStartWorkType: e.target.value })}
+            placeholder="Escalator Cleaning"
+            className="max-w-[200px]"
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+          <p className="flex-1 text-sm font-medium text-slate-800 leading-5">What area will you be working?</p>
+          <Input
+            value={formData.preStartArea}
+            onChange={(e) => onChange({ preStartArea: e.target.value })}
+            placeholder="Level 1"
+            className="max-w-[200px]"
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+          <p className="flex-1 text-sm font-medium text-slate-800 leading-5">What type of equipment are you working on?</p>
+          <Input
+            value={formData.preStartEquipmentType}
+            onChange={(e) => onChange({ preStartEquipmentType: e.target.value })}
+            placeholder="e.g. Liftronic, Schindler"
+            className="max-w-[200px]"
+          />
+        </div>
+
+        <YesNoRow
+          label="Have you completed a visual safety inspection prior to any works being carried out?"
+          value={formData.preStartVisualInspection}
+          onChange={(next) => onChange({ preStartVisualInspection: next })}
         />
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Hazards Identified</label>
-        <Textarea
-          rows={4}
-          value={formData.hazardsIdentified}
-          onChange={(event) => onChange({ hazardsIdentified: event.target.value })}
-          placeholder="Wet floors, public traffic, restricted access, moving machinery..."
+      {/* ── Safety Audit ──────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <SectionHeader label="Safety Audit" score="8 / 8 (100%)" />
+
+        <YesNoRow
+          label="Do you have the appropriate PPE to undertake the works?"
+          value={formData.preStartPpeAppropriate}
+          onChange={(next) => onChange({ preStartPpeAppropriate: next })}
+        />
+        <YesNoRow
+          label="Have you received a site induction?"
+          value={formData.preStartSiteInduction}
+          onChange={(next) => onChange({ preStartSiteInduction: next })}
+        />
+        <YesNoRow
+          label="Have you checked if our machinery is in good working order?"
+          value={formData.preStartMachineryGoodOrder}
+          onChange={(next) => onChange({ preStartMachineryGoodOrder: next })}
+        />
+        <YesNoRow
+          label="Have you completed your checks before mounting the machines on the escalator/travelator?"
+          value={formData.preStartPreMountChecks}
+          onChange={(next) => onChange({ preStartPreMountChecks: next })}
+        />
+        <YesNoRow
+          label="Have you checked if the escalator/travelator drives in reverse prior to starting works?"
+          value={formData.preStartReverseCheck}
+          onChange={(next) => onChange({ preStartReverseCheck: next })}
+        />
+
+        {/* This one: Yes = concern = flagged (bad), No = good */}
+        <YesNoRow
+          label="Is there any concerns or damaged on the escalator/travelator?"
+          value={formData.preStartConcernsDamage}
+          onChange={(next) => onChange({ preStartConcernsDamage: next })}
+          flagOnYes={false}
+        />
+
+        <YesNoRow
+          label="Do you have any photos on the equipment you are working on?"
+          value={formData.preStartPhotos}
+          onChange={(next) => onChange({ preStartPhotos: next })}
+        />
+        <YesNoRow
+          label="Have you used the maintenance barricades to ensure the escalator/travelator is blocked off?"
+          value={formData.preStartBarricades}
+          onChange={(next) => onChange({ preStartBarricades: next })}
+        />
+
+        {/* This one: Yes = concern = flagged (bad), No = good */}
+        <YesNoRow
+          label="Do you have any concerns or comments?"
+          value={formData.preStartAnyConcerns}
+          onChange={(next) => onChange({ preStartAnyConcerns: next })}
+          flagOnYes={false}
         />
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Controls In Place</label>
-        <Textarea
-          rows={4}
-          value={formData.controlsInPlace}
-          onChange={(event) => onChange({ controlsInPlace: event.target.value })}
-          placeholder="Safety cones, signage, isolation procedure, spotter assigned..."
-        />
+      {/* ── Sign-off ──────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+        <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Sign-off</h3>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Name of Workers</label>
+            <Input
+              value={formData.preStartWorkerNames}
+              onChange={(e) => onChange({ preStartWorkerNames: e.target.value })}
+              placeholder="e.g. Suraj and Bishal"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Supervisor to Sign</label>
+            <Input
+              value={formData.preStartSupervisorName}
+              onChange={(e) => onChange({ preStartSupervisorName: e.target.value })}
+              placeholder="Supervisor full name"
+            />
+          </div>
+        </div>
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Pre-start Notes</label>
-        <Textarea
-          rows={5}
-          value={formData.preStartNotes}
-          onChange={(event) => onChange({ preStartNotes: event.target.value })}
-          placeholder="Site-specific notes, access delays, supervisor instructions..."
-        />
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Reviewed By</label>
-        <Input value={formData.reviewedBy} onChange={(event) => onChange({ reviewedBy: event.target.value })} placeholder="Supervisor or site representative" />
-      </div>
     </div>
   );
 }

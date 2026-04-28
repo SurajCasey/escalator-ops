@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, Users } from "lucide-react";
-import { useJobs, type Job, type JobStatus } from "../../../hooks/Usejobs";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, RefreshCw, Users } from "lucide-react";
+import { useJobs, type Job, type JobStatus, frequencyLabel } from "../../../hooks/Usejobs";
 import AddJobModal from "../../jobs/components/AddJobModal";
 
 type CalendarDay = {
@@ -154,7 +154,8 @@ export default function Calendar() {
                   </div>
                   <div className="mt-2 space-y-1">
                     {day.jobs.slice(0, 2).map((j) => (
-                      <div key={j.id} className={`truncate rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_STYLES[j.status]}`}>
+                      <div key={j.id} className={`truncate rounded px-1.5 py-0.5 text-xs font-medium flex items-center gap-1 ${STATUS_STYLES[j.status]}`}>
+                        {j.job_type === "CONTRACT" && <RefreshCw className="h-2.5 w-2.5 shrink-0 opacity-70" />}
                         {formatTime(j.scheduled_at)} {j.client_name}
                       </div>
                     ))}
@@ -188,7 +189,12 @@ export default function Calendar() {
             {!loading && selectedDay?.jobs.map((job) => (
               <div key={job.id} className="px-5 py-4">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium text-slate-900 text-sm">{job.title}</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {job.job_type === "CONTRACT" && (
+                      <RefreshCw className="h-3.5 w-3.5 text-violet-500 shrink-0" title="Contract – recurring" />
+                    )}
+                    <p className="font-medium text-slate-900 text-sm truncate">{job.title}</p>
+                  </div>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[job.status]}`}>{humanize(job.status)}</span>
                 </div>
                 <p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3 w-3" />{job.site_name ?? job.client_name}</p>
@@ -196,6 +202,12 @@ export default function Calendar() {
                   <span className="flex items-center gap-1"><Clock3 className="h-3 w-3 text-slate-400" />{formatTime(job.scheduled_at)}</span>
                   <span className="flex items-center gap-1"><Users className="h-3 w-3 text-slate-400" />{job.assigned_to_name ?? "Unassigned"}</span>
                 </div>
+                {job.job_type === "CONTRACT" && job.frequency_days && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-violet-50 border border-violet-200 px-2.5 py-0.5 text-xs text-violet-700 font-medium">
+                    <RefreshCw className="h-3 w-3" />
+                    {frequencyLabel(job.frequency_days)} contract
+                  </div>
+                )}
                 {job.notes && <p className="mt-2 text-xs text-slate-400 italic">{job.notes}</p>}
               </div>
             ))}

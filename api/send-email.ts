@@ -14,11 +14,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { RESEND_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
+    const { RESEND_API_KEY, RESEND_FROM_EMAIL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
 
     if (!RESEND_API_KEY) return res.status(500).json({ error: "Missing RESEND_API_KEY" });
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY)
       return res.status(500).json({ error: "Missing Supabase env vars" });
+
+    const fromAddress = RESEND_FROM_EMAIL?.trim() || "Operations <onboarding@resend.dev>";
 
     const resend = new Resend(RESEND_API_KEY);
 
@@ -63,13 +65,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // --- 5) Send email ---
     try {
-      const result = await resend.emails.send({
-        from: "Operations <onboarding@resend.dev>",
+      const { data, error: sendError } = await resend.emails.send({
+        from: fromAddress,
         to,
         subject,
         html,
       });
-      return res.status(200).json({ ok: true, result });
+      if (sendError) {
+        console.error("Resend error:", sendError);
+        return res.status(502).json({
+          error: "Email provider rejected send",
+          details: sendError,
+        });
+      }
+      return res.status(200).json({ ok: true, data });
     } catch (err: any) {
       console.error("Resend error:", err);
       return res.status(500).json({ error: "Failed to send email", details: err?.message ?? String(err) });

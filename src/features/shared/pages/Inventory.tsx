@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
-import { AlertTriangle, Package, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDownCircle, Package, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 
 type InventoryItem = {
   id: string;
@@ -15,6 +15,8 @@ type InventoryItem = {
   last_restocked: string | null;
   created_at: string;
 };
+
+type Job = { id: string; title: string; client_name: string };
 
 type ItemForm = {
   name: string;
@@ -44,12 +46,8 @@ function stockStatus(item: InventoryItem): { label: string; cls: string; dot: st
   return { label: "In Stock", cls: "bg-green-50 text-green-700 border-green-100", dot: "bg-green-500" };
 }
 
-type ModalProps = {
-  open: boolean;
-  onClose: () => void;
-  onSaved: () => void;
-  editing?: InventoryItem | null;
-};
+// ── Add / Edit Item Modal ─────────────────────────────────────────────────────
+type ModalProps = { open: boolean; onClose: () => void; onSaved: () => void; editing?: InventoryItem | null };
 
 function ItemModal({ open, onClose, onSaved, editing }: ModalProps) {
   const [form, setForm] = useState<ItemForm>(DEFAULT_FORM);
@@ -57,15 +55,7 @@ function ItemModal({ open, onClose, onSaved, editing }: ModalProps) {
 
   useEffect(() => {
     if (editing) {
-      setForm({
-        name: editing.name,
-        category: editing.category,
-        quantity: editing.quantity,
-        unit: editing.unit,
-        min_quantity: editing.min_quantity,
-        location: editing.location ?? "",
-        notes: editing.notes ?? "",
-      });
+      setForm({ name: editing.name, category: editing.category, quantity: editing.quantity, unit: editing.unit, min_quantity: editing.min_quantity, location: editing.location ?? "", notes: editing.notes ?? "" });
     } else {
       setForm(DEFAULT_FORM);
     }
@@ -73,23 +63,13 @@ function ItemModal({ open, onClose, onSaved, editing }: ModalProps) {
 
   if (!open) return null;
 
-  const set = <K extends keyof ItemForm>(key: K, value: ItemForm[K]) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const set = <K extends keyof ItemForm>(key: K, value: ItemForm[K]) => setForm((p) => ({ ...p, [key]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { toast.error("Name is required."); return; }
     setSaving(true);
-    const payload = {
-      name: form.name.trim(),
-      category: form.category,
-      quantity: form.quantity,
-      unit: form.unit,
-      min_quantity: form.min_quantity,
-      location: form.location.trim() || null,
-      notes: form.notes.trim() || null,
-      last_restocked: new Date().toISOString(),
-    };
+    const payload = { name: form.name.trim(), category: form.category, quantity: form.quantity, unit: form.unit, min_quantity: form.min_quantity, location: form.location.trim() || null, notes: form.notes.trim() || null, last_restocked: new Date().toISOString() };
     let error;
     if (editing) {
       ({ error } = await supabase.from("inventory").update(payload).eq("id", editing.id));
@@ -99,8 +79,7 @@ function ItemModal({ open, onClose, onSaved, editing }: ModalProps) {
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(editing ? "Item updated." : "Item added.");
-    onSaved();
-    onClose();
+    onSaved(); onClose();
   };
 
   return (
@@ -156,6 +135,107 @@ function ItemModal({ open, onClose, onSaved, editing }: ModalProps) {
   );
 }
 
+// ── Use Item Modal ────────────────────────────────────────────────────────────
+type UseItemModalProps = { item: InventoryItem | null; onClose: () => void; onUsed: () => void };
+
+function UseItemModal({ item, onClose, onUsed }: UseItemModalProps) {
+  const [qty, setQty] = useState(1);
+  const [jobId, setJobId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [jobs, setJobs] = useState<Job[]>([]);
+
+  useEffect(() => {
+    if (!item) return;
+    setQty(1); setJobId(""); setNotes("");
+    supabase
+      .from("jobs")
+      .select("id, title, client_name")
+      .in("status", ["SCHEDULED", "IN_PROGRESS"])
+      .order("scheduled_at")
+      .then(({ data }) => setJobs(data ?? []));
+  }, [item]);
+
+  if (!item) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (qty <= 0) { toast.error("Quantity must be > 0"); return; }
+    if (qty > item.quantity) { toast.error(`Only ${item.quantity} ${item.unit} available.`); return; }
+    setSaving(true);
+
+    const { data: session } = await supabase.auth.getSession();
+    const userId = session.session?.user.id;
+    if (!userId) { toast.error("Not logged in."); setSaving(false); return; }
+
+    // Log usage
+    const { error: usageErr } = await supabase.from("inventory_usage").insert({
+      user_id: userId,
+      job_id: jobId || null,
+      item_id: item.id,
+      quantity_used: qty,
+      notes: notes.trim() || null,
+    });
+    if (usageErr) { toast.error(usageErr.message); setSaving(false); return; }
+
+    // Deduct from inventory
+    const { error: invErr } = await supabase
+      .from("inventory")
+      .update({ quantity: item.quantity - qty })
+      .eq("id", item.id);
+    if (invErr) { toast.error(invErr.message); setSaving(false); return; }
+
+    toast.success(`Used ${qty} ${item.unit} of ${item.name}.`);
+    setSaving(false);
+    onUsed();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-950/40" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Use Item</h2>
+            <p className="text-xs text-slate-500 mt-0.5">{item.name} — {item.quantity} {item.unit} available</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"><X className="h-5 w-5" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Quantity to Use *</label>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setQty((q) => Math.max(1, q - 1))} className="w-9 h-9 rounded-lg border border-slate-200 text-lg font-bold text-slate-600 hover:bg-slate-50">−</button>
+              <input type="number" min={1} max={item.quantity} value={qty} onChange={(e) => setQty(Number(e.target.value))} className="flex-1 text-center px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <button type="button" onClick={() => setQty((q) => Math.min(item.quantity, q + 1))} className="w-9 h-9 rounded-lg border border-slate-200 text-lg font-bold text-slate-600 hover:bg-slate-50">+</button>
+              <span className="text-sm text-slate-500 min-w-12">{item.unit}</span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Link to Job (optional)</label>
+            <select value={jobId} onChange={(e) => setJobId(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">— No job —</option>
+              {jobs.map((j) => <option key={j.id} value={j.id}>{j.title} ({j.client_name})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Why / where used…" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60">
+              {saving ? "Logging…" : "Confirm Use"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Inventory Page ───────────────────────────────────────────────────────
 export default function Inventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,9 +244,10 @@ export default function Inventory() {
   const [stockFilter, setStockFilter] = useState("All");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
+  const [usingItem, setUsingItem] = useState<InventoryItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  const fetch = async () => {
+  const fetchItems = async () => {
     setLoading(true);
     const { data, error } = await supabase.from("inventory").select("*").order("name");
     if (error) toast.error(error.message);
@@ -174,7 +255,7 @@ export default function Inventory() {
     setLoading(false);
   };
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { fetchItems(); }, []);
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
@@ -182,11 +263,7 @@ export default function Inventory() {
       const matchSearch = !q || item.name.toLowerCase().includes(q) || (item.location ?? "").toLowerCase().includes(q);
       const matchCat = categoryFilter === "All" || item.category === categoryFilter;
       const ss = stockStatus(item).label;
-      const matchStock =
-        stockFilter === "All" ||
-        (stockFilter === "Low" && ss === "Low Stock") ||
-        (stockFilter === "Out" && ss === "Out of Stock") ||
-        (stockFilter === "OK" && ss === "In Stock");
+      const matchStock = stockFilter === "All" || (stockFilter === "Low" && ss === "Low Stock") || (stockFilter === "Out" && ss === "Out of Stock") || (stockFilter === "OK" && ss === "In Stock");
       return matchSearch && matchCat && matchStock;
     });
   }, [items, search, categoryFilter, stockFilter]);
@@ -206,22 +283,19 @@ export default function Inventory() {
     setConfirmDelete(null);
   };
 
-  const openEdit = (item: InventoryItem) => { setEditing(item); setShowModal(true); };
-  const openCreate = () => { setEditing(null); setShowModal(true); };
-
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="flex justify-between items-start max-w-7xl mx-auto">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Equipment & Inventory</h1>
-            <p className="text-gray-500 text-sm mt-1">Track stock levels, locations, and restock needs.</p>
+            <p className="text-gray-500 text-sm mt-1">Track stock levels, locations, and log usage per job.</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={fetch} disabled={loading} className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <button onClick={fetchItems} disabled={loading} className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </button>
-            <button onClick={openCreate} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">
+            <button onClick={() => { setEditing(null); setShowModal(true); }} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">
               <Plus className="h-4 w-4" /> Add Item
             </button>
           </div>
@@ -305,7 +379,16 @@ export default function Inventory() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => openEdit(item)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"><Pencil className="h-4 w-4" /></button>
+                          {/* Use Item – quick green button */}
+                          <button
+                            onClick={() => setUsingItem(item)}
+                            disabled={item.quantity === 0}
+                            title="Use this item"
+                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors disabled:opacity-30"
+                          >
+                            <ArrowDownCircle className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => { setEditing(item); setShowModal(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"><Pencil className="h-4 w-4" /></button>
                           <button onClick={() => setConfirmDelete(item.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </td>
@@ -318,7 +401,8 @@ export default function Inventory() {
         </div>
       </div>
 
-      <ItemModal open={showModal} onClose={() => setShowModal(false)} onSaved={fetch} editing={editing} />
+      <ItemModal open={showModal} onClose={() => setShowModal(false)} onSaved={fetchItems} editing={editing} />
+      <UseItemModal item={usingItem} onClose={() => setUsingItem(null)} onUsed={fetchItems} />
 
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
