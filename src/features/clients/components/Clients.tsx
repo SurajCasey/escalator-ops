@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
 import AddClientModal from "./AddClientModal";
@@ -42,6 +43,7 @@ function AvatarColors(name: string) {
 }
 
 export default function Clients() {
+  const navigate = useNavigate();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<TabFilter>("all");
@@ -205,7 +207,7 @@ export default function Clients() {
                     paginated.map((client) => {
                       const cfg = STATUS_CONFIG[client.status] ?? STATUS_CONFIG.INACTIVE;
                       return (
-                        <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                        <tr key={client.id} onClick={() => navigate(`${client.id}`)} className="hover:bg-gray-50 transition-colors cursor-pointer">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${AvatarColors(client.name)}`}>

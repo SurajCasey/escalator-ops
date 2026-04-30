@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Timer,
 } from "lucide-react";
+import JobCompletionModal from "../../jobs/components/JobCompletionModal";
 
 /* ── Types ──────────────────────────────────────────────────── */
 type Escalator = {
@@ -125,6 +126,7 @@ export default function ClockIn() {
   const [selectedJobId, setSelectedJobId] = useState("");
   const [clockNote, setClockNote]   = useState("");
   const [locDenied, setLocDenied]   = useState(false);
+  const [completingJob, setCompletingJob] = useState<{ id: string; title: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -239,15 +241,9 @@ export default function ClockIn() {
     await load();
   };
 
-  /* Mark job complete */
-  const handleMarkComplete = async (jobId: string) => {
-    const { error } = await supabase
-      .from("jobs")
-      .update({ status: "COMPLETED", completed_at: new Date().toISOString() })
-      .eq("id", jobId);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Job marked complete!");
-    await load();
+  /* Mark job complete — opens sign-off modal */
+  const handleMarkComplete = (job: Job) => {
+    setCompletingJob({ id: job.id, title: job.title });
   };
 
   /* Toggle escalator */
@@ -288,6 +284,7 @@ export default function ClockIn() {
   }
 
   return (
+    <>
     <div className="min-h-screen bg-slate-50">
 
       {/* ── Page header ─────────────────────────────────────── */}
@@ -462,7 +459,7 @@ export default function ClockIn() {
                           Complete
                         </span>
                       ) : (
-                        <button onClick={() => handleMarkComplete(job.id)}
+                        <button onClick={() => handleMarkComplete(job)}
                           className="flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-xl shrink-0 transition-colors active:scale-95">
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           Complete
@@ -597,5 +594,16 @@ export default function ClockIn() {
         </section>
       </div>
     </div>
+
+    {/* Job completion modal */}
+    {completingJob && (
+      <JobCompletionModal
+        jobId={completingJob.id}
+        jobTitle={completingJob.title}
+        onClose={() => setCompletingJob(null)}
+        onCompleted={load}
+      />
+    )}
+    </>
   );
 }

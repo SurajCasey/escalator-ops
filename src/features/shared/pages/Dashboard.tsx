@@ -482,10 +482,10 @@ export default function Dashboard() {
       </section>
 
       {/* ── Charts Row ── */}
-      <section className="grid gap-5 xl:grid-cols-3">
+      <section className="grid gap-5 md:grid-cols-3">
 
         {/* Weekly bar chart */}
-        <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <div className="md:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="font-semibold text-slate-900">Jobs This Week</h2>
@@ -510,10 +510,10 @@ export default function Dashboard() {
       </section>
 
       {/* ── Upcoming Jobs + Revenue ── */}
-      <section className="grid gap-5 xl:grid-cols-3">
+      <section className="grid gap-5 md:grid-cols-3">
 
         {/* Upcoming jobs */}
-        <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="md:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-slate-900">Upcoming Jobs</h2>
