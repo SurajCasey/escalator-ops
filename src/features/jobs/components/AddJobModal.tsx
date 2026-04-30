@@ -232,7 +232,7 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
       jobId = (data as { id: string }).id;
     }
 
-    const ops: Promise<unknown>[] = [];
+    const ops: PromiseLike<unknown>[] = [];
 
     if (assignedEmployees.length > 0) {
       ops.push(supabase.from("job_assignments").insert(
@@ -268,7 +268,7 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
   };
 
   const isContract   = form.job_type === "CONTRACT";
-  const nextDue      = isContract ? nextDueLabel(form.scheduled_at, form.frequency_days) : null;
+  const nextDue      = isContract ? nextDueLabel(form.scheduled_at, form.frequency_days ?? null) : null;
   const selectedFreq = useCustom ? 0 : (form.frequency_days ?? null);
 
   return (

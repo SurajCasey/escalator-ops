@@ -105,7 +105,6 @@ function WallClock() {
 /* ── Escalator progress ring ────────────────────────────────── */
 function EscProgress({ done, total }: { done: number; total: number }) {
   if (total === 0) return null;
-  const pct = Math.round((done / total) * 100);
   const allDone = done === total;
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${allDone ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>

@@ -191,7 +191,7 @@ export default function Calendar() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
                     {job.job_type === "CONTRACT" && (
-                      <RefreshCw className="h-3.5 w-3.5 text-violet-500 shrink-0" title="Contract – recurring" />
+                      <RefreshCw className="h-3.5 w-3.5 text-violet-500 shrink-0" />
                     )}
                     <p className="font-medium text-slate-900 text-sm truncate">{job.title}</p>
                   </div>

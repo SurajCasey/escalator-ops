@@ -244,7 +244,7 @@ export default function Dashboard() {
   const { jobs, loading: jobsLoading, fetchJobs } = useJobs();
   const [addJobOpen, setAddJobOpen] = useState(false);
   const [role, setRole] = useState<Role>("EMPLOYEE");
-  const [userId, setUserId] = useState<string | null>(null);
+  const [_userId, setUserId] = useState<string | null>(null);
   const [name, setName] = useState("Team Member");
   const [profileLoading, setProfileLoading] = useState(true);
   const [reports, setReports] = useState<ReportItem[]>([]);
