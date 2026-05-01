@@ -1,9 +1,14 @@
-import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Download, FileCheck2, Loader2, Plus, Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 import type { ReportFormData, SwmsWorker } from "./types";
+import { generateAndSaveSwms } from "../lib/swmsFillPdf";
 
 type Props = {
   formData: ReportFormData;
   onChange: (patch: Partial<ReportFormData>) => void;
+  /** Optional job UUID — passed through to storage filename and DB record */
+  jobId?: string;
 };
 
 function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
@@ -19,8 +24,48 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{children}</label>;
 }
 
-export default function SWMS({ formData, onChange }: Props) {
+export default function SWMS({ formData, onChange, jobId }: Props) {
   const workers = formData.swmsWorkers ?? [];
+  const [generating, setGenerating] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+
+  async function handleGeneratePdf() {
+    setGenerating(true);
+    try {
+      const result = await generateAndSaveSwms(
+        {
+          clientName:     formData.swmsClientName,
+          jobSiteAddress: formData.swmsJobSiteAddress,
+          contactName:    formData.swmsContactName,
+          contactTitle:   formData.swmsContactTitle,
+          contactPhone:   formData.swmsContactPhone,
+          contactMobile:  formData.swmsContactMobile,
+          contactEmail:   formData.swmsContactEmail,
+          initiatedBy:    formData.swmsInitiatedBy,
+          initiatedDate:  formData.documentDate,
+          workLocations:  formData.swmsWorkLocations,
+          supervisorName: formData.swmsSupervisorReview,
+          supervisorDate: formData.documentDate,
+          managementName: formData.swmsManagementReview,
+          managementDate: formData.documentDate,
+          workers: workers.map((w) => ({
+            name:           w.name,
+            classification: w.classification,
+            employedBy:     w.employedBy,
+            date:           w.date,
+          })),
+        },
+        jobId,
+      );
+      setDownloadUrl(result.publicUrl);
+      toast.success("SWMS PDF generated and saved!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to generate PDF. Check console for details.");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   function updateWorker(index: number, patch: Partial<SwmsWorker>) {
     const next = workers.map((w, i) => (i === index ? { ...w, ...patch } : w));
@@ -282,10 +327,52 @@ export default function SWMS({ formData, onChange }: Props) {
         </div>
       </div>
 
-      {/* ── Static info note ──────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
-        <p className="text-xs text-sky-800 leading-5">
-          <span className="font-semibold">Note:</span> The SWMS PDF will include the full pre-filled Hazard Analysis table (Parts 3 & 4), Hierarchy of Controls, Risk Calculator, Equipment list, and PPE section — exactly as per the Statewide Escalator Cleaning JSEA&SWMS template. Only the fields above are editable per job.
+      {/* ── Generate Filled PDF ───────────────────────────────────────── */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <FileCheck2 className="h-4 w-4 text-slate-500" />
+          <h3 className="text-sm font-semibold text-slate-800">Generate Official SWMS PDF</h3>
+        </div>
+
+        <p className="text-xs text-slate-500 leading-5">
+          Fills your data into the original Statewide Escalator Cleaning JSEA&SWMS template —
+          preserving the exact layout, branding, and all static content (Hazard Analysis, Risk
+          Calculator, PPE, etc). The filled PDF is saved to cloud storage and a download link
+          is provided below.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleGeneratePdf}
+            disabled={generating}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {generating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileCheck2 className="h-4 w-4" />
+            )}
+            {generating ? "Generating…" : "Generate Filled PDF"}
+          </button>
+
+          {downloadUrl && (
+            <a
+              href={downloadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+            >
+              <Download className="h-4 w-4" />
+              Download SWMS PDF
+            </a>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-400 leading-5">
+          <span className="font-medium">Note:</span> The PDF uses the official template — only
+          the fields you filled above are written into it. All hazard tables, controls, and
+          compliance content remain exactly as in the master document.
         </p>
       </div>
 

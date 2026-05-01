@@ -21,6 +21,9 @@ import Reports from "./features/shared/pages/Reports"
 import ClockIn from "./features/shared/pages/ClockIn"
 import Timesheet from "./features/admin/pages/Timesheet"
 import Invoices from "./features/invoices/pages/Invoices"
+import Receipts from "./features/receipts/pages/Receipts"
+import PurchaseRequests from "./features/purchases/pages/PurchaseRequests"
+import Payroll from "./features/payroll/pages/Payroll"
 
 
 function App() {
@@ -51,6 +54,9 @@ function App() {
               <Route path="/clock" element={<ClockIn/>}/>
               <Route path="/people" element={<People/>}/>
               <Route path="/settings" element={<Settings/>}/>
+              <Route path="/receipts" element={<Receipts/>}/>
+              <Route path="/purchase-requests" element={<PurchaseRequests/>}/>
+              <Route path="/payroll" element={<Payroll/>}/>
             </Route>
           </Route>
 
@@ -67,6 +73,9 @@ function App() {
               <Route path="/admin/reports" element={<Reports/>}/>
               <Route path="/admin/timesheet" element={<Timesheet/>}/>
               <Route path="/admin/invoices" element={<Invoices/>}/>
+              <Route path="/admin/receipts" element={<Receipts/>}/>
+              <Route path="/admin/purchase-requests" element={<PurchaseRequests/>}/>
+              <Route path="/admin/payroll" element={<Payroll/>}/>
               <Route path="/admin/settings" element={<Settings/>}/>
             </Route>
           </Route>

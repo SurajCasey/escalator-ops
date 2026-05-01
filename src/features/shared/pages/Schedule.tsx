@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { CalendarDays, Clock3, Filter, Plus, Search, Trash2, Users, Pencil } from "lucide-react";
 import { useJobs, type Job, type JobStatus } from "../../../hooks/Usejobs";
 import AddJobModal from "../../jobs/components/AddJobModal";
+import JobDetailPanel from "../../jobs/components/JobDetailPanel";
 
 type ShiftName = "Morning" | "Midday" | "Night";
 
@@ -41,6 +42,7 @@ export default function Schedule() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Job | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return jobs.filter((job) => {
@@ -165,7 +167,11 @@ export default function Schedule() {
                 <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-slate-500">No jobs match the current filters.</td></tr>
               )}
               {!loading && filtered.map((job) => (
-                <tr key={job.id} className="hover:bg-slate-50">
+                <tr
+                  key={job.id}
+                  onClick={() => setDetailJobId(job.id)}
+                  className="hover:bg-slate-50 cursor-pointer"
+                >
                   <td className="px-5 py-4">
                     <p className="font-medium text-slate-900">{job.title}</p>
                     {job.site_name && <p className="text-xs text-slate-500">{job.site_name}</p>}
@@ -180,7 +186,7 @@ export default function Schedule() {
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => openEdit(job)}
                         className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
@@ -203,6 +209,11 @@ export default function Schedule() {
           </table>
         </div>
       </section>
+
+      {/* Job detail panel */}
+      {detailJobId && (
+        <JobDetailPanel jobId={detailJobId} onClose={() => setDetailJobId(null)} />
+      )}
 
       {/* Modals */}
       <AddJobModal

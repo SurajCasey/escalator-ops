@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Building2, Calendar, CheckCircle2,
-  ChevronRight, Clock, Edit2, FileText, MapPin,
-  Package, Phone, Plus, RefreshCw, Trash2, X,
+  ChevronRight, Clock, Edit2, Eye, FileText, Image,
+  MapPin, Package, Phone, Plus, RefreshCw, Trash2, X,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
+import JobDetailPanel from "../../jobs/components/JobDetailPanel";
 
 /* ── Types ───────────────────────────────────────────────────── */
 type Client = {
@@ -52,6 +53,16 @@ type Invoice = {
 };
 
 type Tab = "overview" | "assets" | "jobs" | "invoices";
+
+type AssetPhoto = {
+  id: string;
+  photo_data: string;
+  photo_type: string;
+  caption: string | null;
+  created_at: string;
+  job_title: string;
+  job_date: string;
+};
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 const STATUS_CFG = {
@@ -196,11 +207,73 @@ export default function ClientDetail() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState<Tab>("overview");
   const [assetModal, setAssetModal] = useState<{ open: boolean; asset: Asset | null }>({ open: false, asset: null });
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
+  const [assetPhotos, setAssetPhotos] = useState<Record<string, AssetPhoto[]>>({});
+  const [loadingAssetPhotos, setLoadingAssetPhotos] = useState<Record<string, boolean>>({});
 
   const fetchClient  = async () => { const { data } = await supabase.from("clients").select("*").eq("id", id).single(); if (data) setClient(data as Client); };
   const fetchAssets  = async () => { const { data } = await supabase.from("client_assets").select("*").eq("client_id", id).order("unit_number"); if (data) setAssets(data as Asset[]); };
   const fetchJobs    = async () => { const { data } = await supabase.from("jobs").select("id, title, status, scheduled_at, assigned_to_name, site_name").eq("client_id", id).order("scheduled_at", { ascending: false }); if (data) setJobs(data as Job[]); };
   const fetchInvoices = async () => { const { data } = await supabase.from("invoices").select("id, invoice_number, amount, status, issued_at, due_at").eq("client_id", id).order("created_at", { ascending: false }); if (data) setInvoices(data as Invoice[]); };
+
+  /* Load photos for a specific escalator unit (lazy, on demand) */
+  const loadAssetPhotos = async (unitNumber: string) => {
+    if (assetPhotos[unitNumber] || loadingAssetPhotos[unitNumber]) return;
+    setLoadingAssetPhotos((p) => ({ ...p, [unitNumber]: true }));
+
+    // Find all job_ids for this client that had this escalator unit
+    const { data: escRows } = await supabase
+      .from("job_escalators")
+      .select("job_id")
+      .eq("unit_number", unitNumber);
+
+    const jobIds = (escRows ?? []).map((r: { job_id: string }) => r.job_id);
+
+    if (jobIds.length === 0) {
+      setAssetPhotos((p) => ({ ...p, [unitNumber]: [] }));
+      setLoadingAssetPhotos((p) => ({ ...p, [unitNumber]: false }));
+      return;
+    }
+
+    // Filter to jobs belonging to this client
+    const { data: clientJobs } = await supabase
+      .from("jobs")
+      .select("id, title, scheduled_at")
+      .eq("client_id", id)
+      .in("id", jobIds);
+
+    const clientJobIds = (clientJobs ?? []).map((j: { id: string }) => j.id);
+    const jobMeta: Record<string, { title: string; scheduled_at: string }> = {};
+    (clientJobs ?? []).forEach((j: { id: string; title: string; scheduled_at: string }) => { jobMeta[j.id] = j; });
+
+    if (clientJobIds.length === 0) {
+      setAssetPhotos((p) => ({ ...p, [unitNumber]: [] }));
+      setLoadingAssetPhotos((p) => ({ ...p, [unitNumber]: false }));
+      return;
+    }
+
+    const { data: photoRows } = await supabase
+      .from("job_photos")
+      .select("id, photo_data, photo_type, caption, created_at, job_id")
+      .in("job_id", clientJobIds)
+      .order("created_at");
+
+    const photos: AssetPhoto[] = (photoRows ?? []).map((p: {
+      id: string; photo_data: string; photo_type: string;
+      caption: string | null; created_at: string; job_id: string;
+    }) => ({
+      id: p.id,
+      photo_data: p.photo_data,
+      photo_type: p.photo_type,
+      caption: p.caption,
+      created_at: p.created_at,
+      job_title: jobMeta[p.job_id]?.title ?? "Unknown job",
+      job_date: jobMeta[p.job_id]?.scheduled_at ?? p.created_at,
+    }));
+
+    setAssetPhotos((prev) => ({ ...prev, [unitNumber]: photos }));
+    setLoadingAssetPhotos((p) => ({ ...p, [unitNumber]: false }));
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -380,47 +453,116 @@ export default function ClientDetail() {
                 </button>
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {assets.map((asset) => (
-                  <div key={asset.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col gap-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                        <RefreshCw className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <div className="flex gap-1 ml-auto">
-                        <button
-                          onClick={() => setAssetModal({ open: true, asset })}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => deleteAsset(asset.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-900">{asset.unit_number}</p>
-                      {asset.location && <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-1"><MapPin className="h-3.5 w-3.5 shrink-0" />{asset.location}</p>}
-                    </div>
-                    <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                      {[
-                        { label: "Model",         value: asset.model },
-                        { label: "Serial No.",    value: asset.serial_number },
-                        { label: "Installed",     value: asset.install_date ? fmt(asset.install_date) : null },
-                      ].map((f) => f.value && (
-                        <div key={f.label}>
-                          <dt className="text-slate-400">{f.label}</dt>
-                          <dd className="font-medium text-slate-700 mt-0.5">{f.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    {asset.notes && <p className="text-xs text-slate-400 italic border-t border-slate-100 pt-2">{asset.notes}</p>}
-                  </div>
-                ))}
+              <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      <th className="px-5 py-3 text-left">Unit</th>
+                      <th className="px-5 py-3 text-left">Location</th>
+                      <th className="px-5 py-3 text-left hidden sm:table-cell">Model</th>
+                      <th className="px-5 py-3 text-left hidden md:table-cell">Serial No.</th>
+                      <th className="px-5 py-3 text-left hidden lg:table-cell">Installed</th>
+                      <th className="px-5 py-3 text-left">Photos</th>
+                      <th className="px-5 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {assets.map((asset) => (
+                      <>
+                        <tr key={asset.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                                <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">{asset.unit_number}</p>
+                                {asset.notes && <p className="text-xs text-slate-400 italic truncate max-w-[120px]">{asset.notes}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5 text-sm text-slate-500">
+                            {asset.location
+                              ? <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />{asset.location}</span>
+                              : <span className="text-slate-300">—</span>
+                            }
+                          </td>
+                          <td className="px-5 py-3.5 text-sm text-slate-500 hidden sm:table-cell">{asset.model ?? <span className="text-slate-300">—</span>}</td>
+                          <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">{asset.serial_number ?? <span className="text-slate-300">—</span>}</td>
+                          <td className="px-5 py-3.5 text-sm text-slate-500 hidden lg:table-cell">
+                            {asset.install_date ? fmt(asset.install_date) : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            {!assetPhotos[asset.unit_number] ? (
+                              <button
+                                onClick={() => loadAssetPhotos(asset.unit_number)}
+                                disabled={loadingAssetPhotos[asset.unit_number]}
+                                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-50 whitespace-nowrap"
+                              >
+                                <Image className="h-3.5 w-3.5 shrink-0" />
+                                {loadingAssetPhotos[asset.unit_number] ? "Loading…" : "Load photos"}
+                              </button>
+                            ) : assetPhotos[asset.unit_number].length === 0 ? (
+                              <span className="text-xs text-slate-400">No photos</span>
+                            ) : (
+                              <span className="text-xs font-medium text-slate-700 flex items-center gap-1">
+                                <Image className="h-3.5 w-3.5 text-slate-400" />
+                                {assetPhotos[asset.unit_number].length} photo{assetPhotos[asset.unit_number].length !== 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => setAssetModal({ open: true, asset })}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                title="Edit"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => deleteAsset(asset.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Expanded photo row */}
+                        {assetPhotos[asset.unit_number]?.length > 0 && (
+                          <tr key={`${asset.id}-photos`} className="bg-slate-50/60">
+                            <td colSpan={7} className="px-5 py-3">
+                              <div className="flex gap-2 flex-wrap">
+                                {assetPhotos[asset.unit_number].map((photo) => (
+                                  <div
+                                    key={photo.id}
+                                    className="relative h-16 w-16 rounded-lg overflow-hidden border border-slate-200 group cursor-pointer shrink-0"
+                                    title={`${photo.job_title} · ${fmt(photo.job_date)}`}
+                                  >
+                                    <img
+                                      src={photo.photo_data}
+                                      alt=""
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                    />
+                                    <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors" />
+                                  </div>
+                                ))}
+                                <div className="flex flex-col justify-center ml-1">
+                                  <p className="text-xs text-slate-400">
+                                    From {new Set(assetPhotos[asset.unit_number].map(p => p.job_title)).size} job{new Set(assetPhotos[asset.unit_number].map(p => p.job_title)).size !== 1 ? "s" : ""}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -445,6 +587,7 @@ export default function ClientDetail() {
                       <th className="px-5 py-3 text-left">Date</th>
                       <th className="px-5 py-3 text-left">Assigned To</th>
                       <th className="px-5 py-3 text-left">Status</th>
+                      <th className="px-5 py-3 text-left"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -458,6 +601,14 @@ export default function ClientDetail() {
                           <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${JOB_STATUS_CFG[j.status] ?? "bg-slate-100 text-slate-600"}`}>
                             {humanize(j.status)}
                           </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <button
+                            onClick={() => setDetailJobId(j.id)}
+                            className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                          >
+                            <Eye className="h-3.5 w-3.5" /> View
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -519,6 +670,11 @@ export default function ClientDetail() {
           onClose={() => setAssetModal({ open: false, asset: null })}
           onSaved={fetchAssets}
         />
+      )}
+
+      {/* Job detail panel */}
+      {detailJobId && (
+        <JobDetailPanel jobId={detailJobId} onClose={() => setDetailJobId(null)} />
       )}
     </div>
   );
