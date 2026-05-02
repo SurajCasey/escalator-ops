@@ -430,7 +430,7 @@ export default function Invoices() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-160">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-5 py-3 text-left">Invoice #</th>
@@ -451,8 +451,8 @@ export default function Invoices() {
                         <span className="font-mono text-sm font-semibold text-slate-900">{inv.invoice_number}</span>
                       </td>
                       <td className="px-5 py-4">
-                        <p className="text-sm font-medium text-slate-900 truncate max-w-[180px]">{inv.client_name}</p>
-                        <p className="text-xs text-slate-400 truncate max-w-[180px]">{inv.job_title}</p>
+                        <p className="text-sm font-medium text-slate-900 truncate max-w-45">{inv.client_name}</p>
+                        <p className="text-xs text-slate-400 truncate max-w-45">{inv.job_title}</p>
                       </td>
                       <td className="px-5 py-4 text-sm text-slate-600">{fmt(inv.issued_at)}</td>
                       <td className="px-5 py-4 text-sm text-slate-600">{inv.due_at ? fmt(inv.due_at) : "—"}</td>
