@@ -71,7 +71,7 @@ export default function People() {
   const [statusTab, setStatusTab] = useState<"ALL" | Status>("ALL");
   const [roleFilter, setRoleFilter] = useState<"ALL" | Role>("ALL");
   const [editTarget, setEditTarget] = useState<Person | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ full_name: "", role: "EMPLOYEE", status: "ACTIVE", hourly_rate: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ full_name: "", role: "EMPLOYEE", status: "ACTIVE", hourly_rate: "", job_title: "" });
   const [saving, setSaving]     = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
 

@@ -214,7 +214,7 @@ function JobCard({ job, isActive, onTap }: { job: Job; isActive: boolean; onTap:
 
 /* ── JobDetailView ───────────────────────────────────────────── */
 function JobDetailView({
-  job, userId, openEntry, busy, locDenied,
+  job, userId: _userId, openEntry, busy, locDenied,
   onBack, onClockIn, onClockOut, onMarkComplete, onToggleEscalator,
 }: {
   job: Job;
@@ -444,7 +444,7 @@ function JobDetailView({
 export default function ClockIn() {
   const [userId, setUserId]         = useState<string | null>(null);
   const [jobs, setJobs]             = useState<Job[]>([]);
-  const [entries, setEntries]       = useState<TimeEntry[]>([]);
+  const [_entries, setEntries]      = useState<TimeEntry[]>([]);
   const [openEntry, setOpenEntry]   = useState<TimeEntry | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(localIsoDate(new Date()));
   const [weekOffset, setWeekOffset] = useState(0);
