@@ -41,154 +41,380 @@ export function buildReportPdf(document: ReportDocument): Blob {
   return buildGeneralReportPdf(document);
 }
 
+// ─── Tri-state helper: true=Yes false=No null/undefined/"N/A"=N/A ─────────────
+function tri(val: boolean | null | undefined | string): string {
+  if (val === null || val === undefined || val === "N/A") return "N/A";
+  if (val === true) return "Yes";
+  if (val === false) return "No";
+  return String(val);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// PRE-START OH&S AND SITE INSPECTION
+// PRE-START OH&S AND SITE INSPECTION  —  Figma redesign
 // ═══════════════════════════════════════════════════════════════════════════════
 function buildPreStartPdf(doc: ReportDocument): Blob {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const fd = doc.formData;
-  const W = 210;
-  const margin = 14;
-  const colW = W - margin * 2;
+  const fd  = doc.formData;
 
-  // ── Page 1: Cover ──────────────────────────────────────────────────────────
-  // Header bar
-  fillRgb(pdf, BLUE);
-  pdf.rect(0, 0, W, 18, "F");
-  rgb(pdf, WHITE);
+  // ── Design tokens ───────────────────────────────────────────────────────────
+  const W = 210, H = 297, M = 14;
+  const cW = W - M * 2; // 182 mm content width
+
+  const HDR_BLUE  = [43, 60, 200]   as const; // royal blue header
+  const SEC_DARK  = [28, 36, 52]    as const; // dark navy section headers
+  const PAGE_BG   = [240, 242, 248] as const; // light gray page background
+  const ACCENT_B  = [59, 130, 246]  as const; // blue left-border on info items
+  const G_PILL    = [34, 197, 94]   as const; // green YES pill
+  const R_PILL    = [239, 68, 68]   as const; // red NO pill
+  const SHADOW_C  = [210, 215, 228] as const; // card drop shadow
+  const DIVIDER_C = [226, 232, 240] as const; // row divider line
+  const T_DARK    = [17, 24, 39]    as const; // near-black text
+  const T_GRAY    = [107, 114, 128] as const; // gray label / answer text
+  const WHITE3    = [255, 255, 255] as const;
+
+  // ── Report ID  e.g. SEC-2026-0504-001 ──────────────────────────────────────
+  const rawDate = fd.documentDate || new Date().toISOString().slice(0, 10);
+  const dObj    = new Date(rawDate + "T12:00:00");
+  const rID     = `SEC-${dObj.getFullYear()}-`
+                + `${String(dObj.getMonth() + 1).padStart(2, "0")}`
+                + `${String(dObj.getDate()).padStart(2, "0")}-001`;
+
+  // ── Page state ──────────────────────────────────────────────────────────────
+  let y       = 0;
+  let pageNum = 0;
+  const footerDone = new Set<number>();
+
+  function renderFooter() {
+    if (footerDone.has(pageNum)) return;
+    footerDone.add(pageNum);
+    // Divider line
+    strokeRgb(pdf, DIVIDER_C);
+    pdf.setLineWidth(0.2);
+    pdf.line(M, H - 14, W - M, H - 14);
+    // Centre text
+    rgb(pdf, T_GRAY);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7.5);
+    pdf.text(
+      "Statewide Escalator Cleaning Pty Ltd  ·  Pre-Start Safety Report",
+      W / 2, H - 8, { align: "center" },
+    );
+    // Page number on the right
+    pdf.text(`Page ${pageNum}`, W - M, H - 8, { align: "right" });
+  }
+
+  function ensureSpace(needed: number) {
+    if (y + needed > H - 22) {
+      renderFooter();
+      startPage(false);
+    }
+  }
+
+  function startPage(isFirst: boolean) {
+    if (pageNum > 0) pdf.addPage();
+    pageNum++;
+
+    // Page background
+    fillRgb(pdf, PAGE_BG);
+    pdf.rect(0, 0, W, H, "F");
+
+    if (isFirst) {
+      // ── Big blue header ─────────────────────────────────────────────────────
+      const hH = 40;
+      fillRgb(pdf, HDR_BLUE);
+      pdf.rect(0, 0, W, hH, "F");
+
+      // Company name
+      rgb(pdf, WHITE3);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(20);
+      pdf.text("STATEWIDE", M, 17);
+      pdf.setFontSize(9);
+      pdf.text("ESCALATOR CLEANING", M, 26);
+
+      // Report ID frosted pill
+      const pW = 66, pH = 22, pX = W - M - pW, pY = (hH - pH) / 2;
+      fillRgb(pdf, [62, 80, 218] as const);
+      pdf.roundedRect(pX, pY, pW, pH, 3, 3, "F");
+      strokeRgb(pdf, [100, 120, 240] as const);
+      pdf.setLineWidth(0.4);
+      pdf.roundedRect(pX, pY, pW, pH, 3, 3, "S");
+      rgb(pdf, [170, 190, 255] as const);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(6.5);
+      pdf.text("REPORT ID", pX + pW / 2, pY + 7.5, { align: "center" });
+      rgb(pdf, WHITE3);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9.5);
+      pdf.text(rID, pX + pW / 2, pY + 17, { align: "center" });
+
+      y = hH + 8;
+    } else {
+      // ── Continuation mini-header ────────────────────────────────────────────
+      fillRgb(pdf, HDR_BLUE);
+      pdf.rect(0, 0, W, 12, "F");
+      rgb(pdf, WHITE3);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7);
+      pdf.text("Statewide Escalator Cleaning", M, 8.5);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("Pre-Start Safety Report", W - M, 8.5, { align: "right" });
+      y = 18;
+    }
+  }
+
+  // ── Drawing helpers ─────────────────────────────────────────────────────────
+
+  /** White rounded card with subtle drop shadow */
+  function card(cx: number, cy: number, cw: number, ch: number) {
+    fillRgb(pdf, SHADOW_C);
+    pdf.roundedRect(cx + 0.8, cy + 1, cw, ch, 4, 4, "F");
+    fillRgb(pdf, WHITE3);
+    pdf.roundedRect(cx, cy, cw, ch, 4, 4, "F");
+  }
+
+  /** Dark navy section header bar — rounded on top only */
+  function sectionHeader(cx: number, cy: number, cw: number, label: string) {
+    fillRgb(pdf, SEC_DARK);
+    pdf.roundedRect(cx, cy, cw, 12, 4, 4, "F");
+    pdf.rect(cx, cy + 6, cw, 6, "F"); // flatten bottom corners
+    rgb(pdf, WHITE3);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(9);
+    pdf.text(label, cx + 8, cy + 8.5);
+  }
+
+  /** Calculate how many lines a question wraps to and the resulting row height */
+  function measure(question: string): { lines: string[]; h: number } {
+    pdf.setFontSize(8.5);
+    const lines = splitText(pdf, question, cW * 0.62);
+    return { lines, h: Math.max(15, lines.length * 5.4 + 6) };
+  }
+
+  /** Single question/answer row inside a card */
+  function qRow(
+    cx: number, cy: number, cw: number,
+    lines: string[], h: number,
+    answer: string, isYesNo: boolean, isGood: boolean,
+    showDivider: boolean,
+  ) {
+    if (showDivider) {
+      strokeRgb(pdf, DIVIDER_C);
+      pdf.setLineWidth(0.3);
+      pdf.line(cx + 6, cy, cx + cw - 6, cy);
+    }
+
+    // Question text — vertically centred
+    rgb(pdf, T_DARK);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8.5);
+    const textY = cy + (h - (lines.length - 1) * 5.4) / 2;
+    pdf.text(lines, cx + 8, textY);
+
+    // Answer — pill for YES/NO, plain text otherwise
+    if (isYesNo && answer !== "N/A") {
+      const col = isGood ? G_PILL : R_PILL;
+      const pW = 24, pH = 9;
+      const pX = cx + cw - 10 - pW;
+      const pY = cy + (h - pH) / 2;
+      fillRgb(pdf, col);
+      pdf.roundedRect(pX, pY, pW, pH, 2.5, 2.5, "F");
+      rgb(pdf, WHITE3);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.5);
+      pdf.text(answer.toUpperCase(), pX + pW / 2, pY + 6.3, { align: "center" });
+    } else {
+      rgb(pdf, T_GRAY);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8.5);
+      pdf.text(answer, cx + cw - 10, cy + h / 2 + 1.5, { align: "right" });
+    }
+  }
+
+  // ── BEGIN RENDER ────────────────────────────────────────────────────────────
+  startPage(true);
+
+  // ── 1. Info card ─────────────────────────────────────────────────────────────
+  const INFO_H = 52;
+  ensureSpace(INFO_H + 6);
+  card(M, y, cW, INFO_H);
+
+  rgb(pdf, T_DARK);
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(7);
-  pdf.text("safetyculture.com", margin, 7);
-  pdf.setFontSize(8);
-  pdf.text("Powered by SafetyCulture", W - margin, 7, { align: "right" });
+  pdf.setFontSize(16);
+  pdf.text("Pre-Start OH&S and Site Inspection", M + 8, y + 14);
 
-  // Logo area placeholder
-  fillRgb(pdf, LIGHT);
-  pdf.rect(margin, 22, 40, 14, "F");
-  rgb(pdf, BLUE);
+  const dateTimeLine = fd.documentDate
+    ? `${fmt(fd.documentDate)}${fd.startTime ? " " + fd.startTime + " AEST" : ""}`
+    : "—";
+  const itemW = (cW - 16) / 3;
+  const infoY = y + 28;
+
+  [
+    { label: "Site Location", value: fd.preStartSiteLocation || "—" },
+    { label: "Date",          value: dateTimeLine },
+    { label: "Prepared by",   value: fd.preparedBy || "—" },
+  ].forEach((item, i) => {
+    const ix = M + 8 + i * itemW;
+    // Blue left bar — 1.5 mm wide
+    fillRgb(pdf, ACCENT_B);
+    pdf.rect(ix, infoY, 1.5, 16, "F");
+    // Label (small gray)
+    rgb(pdf, T_GRAY);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.text(item.label, ix + 4.5, infoY + 5.5);
+    // Value (bold dark)
+    rgb(pdf, T_DARK);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(9);
+    const vl = splitText(pdf, item.value, itemW - 10);
+    pdf.text(vl[0] ?? item.value, ix + 4.5, infoY + 13.5);
+  });
+
+  y += INFO_H + 12;
+
+  // ── 2. Prestart Audit card ───────────────────────────────────────────────────
+  type QItem = { q: string; a: string; isYesNo: boolean; isGood: boolean };
+
+  const prestartQ: QItem[] = [
+    { q: "What type of works are you performing?",
+      a: fd.preStartWorkType || "—", isYesNo: false, isGood: true },
+    { q: "What area will you be working?",
+      a: fd.preStartArea || "—", isYesNo: false, isGood: true },
+    { q: "What type of equipment are you working on?",
+      a: fd.preStartEquipmentType === "Other"
+          ? (fd.preStartEquipmentOther || "Other")
+          : (fd.preStartEquipmentType || "—"),
+      isYesNo: false, isGood: true },
+    { q: "Have you completed a visual inspection prior to any works being carried out?",
+      a: tri(fd.preStartVisualInspection as boolean | null),
+      isYesNo: true, isGood: fd.preStartVisualInspection !== false },
+  ];
+
+  const prestartM = prestartQ.map(q => ({ ...q, ...measure(q.q) }));
+  const prestartH = 12 + prestartM.reduce((s, r) => s + r.h, 0) + 4;
+
+  ensureSpace(prestartH);
+  card(M, y, cW, prestartH);
+  sectionHeader(M, y, cW, "PRESTART AUDIT");
+
+  let rY = y + 12;
+  prestartM.forEach((row, i) => {
+    qRow(M, rY, cW, row.lines, row.h, row.a, row.isYesNo, row.isGood, i > 0);
+    rY += row.h;
+  });
+  y += prestartH + 6;
+
+  // ── 3. Safety Audit card ─────────────────────────────────────────────────────
+  const safetyQ: QItem[] = [
+    { q: "Do you have the appropriate PPE to undertake the works?",
+      a: tri(fd.preStartPpeAppropriate as boolean | null),
+      isYesNo: true, isGood: fd.preStartPpeAppropriate !== false },
+    { q: "Have you received a site induction?",
+      a: tri(fd.preStartSiteInduction as boolean | null),
+      isYesNo: true, isGood: fd.preStartSiteInduction !== false },
+    { q: "Have you checked if our machinery is in good working order?",
+      a: tri(fd.preStartMachineryGoodOrder as boolean | null),
+      isYesNo: true, isGood: fd.preStartMachineryGoodOrder !== false },
+    { q: "Have you completed your checks before mounting the machines on the escalator/travelator?",
+      a: tri(fd.preStartPreMountChecks as boolean | null),
+      isYesNo: true, isGood: fd.preStartPreMountChecks !== false },
+    { q: "Have you checked if the escalator/travelator drives in reverse prior to starting works?",
+      a: tri(fd.preStartReverseCheck as boolean | null),
+      isYesNo: true, isGood: fd.preStartReverseCheck !== false },
+    { q: "Is there any damage or concerns on the escalator/travelator?",
+      a: tri(fd.preStartConcernsDamage as boolean | null),
+      isYesNo: true, isGood: fd.preStartConcernsDamage !== true },
+    { q: "Have you used maintenance barricades to block off the escalator/travelator?",
+      a: tri(fd.preStartBarricades as boolean | null),
+      isYesNo: true, isGood: fd.preStartBarricades !== false },
+  ];
+
+  const safetyM = safetyQ.map(q => ({ ...q, ...measure(q.q) }));
+  const safetyH = 12 + safetyM.reduce((s, r) => s + r.h, 0) + 4;
+
+  ensureSpace(safetyH);
+  card(M, y, cW, safetyH);
+  sectionHeader(M, y, cW, "SAFETY AUDIT");
+
+  rY = y + 12;
+  safetyM.forEach((row, i) => {
+    qRow(M, rY, cW, row.lines, row.h, row.a, row.isYesNo, row.isGood, i > 0);
+    rY += row.h;
+  });
+  y += safetyH + 6;
+
+  // ── 4. Comments card (only if filled) ────────────────────────────────────────
+  if (fd.preStartAnyConcerns) {
+    pdf.setFontSize(8.5);
+    const cLines = splitText(pdf, String(fd.preStartAnyConcerns), cW - 20);
+    const commH = 12 + cLines.length * 5.5 + 10;
+    ensureSpace(commH);
+    card(M, y, cW, commH);
+    sectionHeader(M, y, cW, "COMMENTS");
+    rgb(pdf, T_DARK);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8.5);
+    pdf.text(cLines, M + 8, y + 21);
+    y += commH + 6;
+  }
+
+  // ── 5. Signature card ────────────────────────────────────────────────────────
+  const SIG_H = 48;
+  ensureSpace(SIG_H);
+  card(M, y, cW, SIG_H);
+
+  rgb(pdf, T_DARK);
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(9);
-  pdf.text("STATEWIDE", margin + 2, 28);
-  pdf.setFontSize(7);
-  pdf.text("ESCALATOR CLEANING", margin + 2, 33);
+  pdf.setFontSize(12);
+  pdf.text("Supervisor Signature", M + 8, y + 14);
 
-  // Title
-  rgb(pdf, DARK);
+  // Signature box
+  const sbX = M + 8, sbY = y + 20, sbW = 58, sbH = 22;
+  fillRgb(pdf, PAGE_BG);
+  pdf.roundedRect(sbX, sbY, sbW, sbH, 3, 3, "F");
+  strokeRgb(pdf, DIVIDER_C);
+  pdf.setLineWidth(0.5);
+  pdf.roundedRect(sbX, sbY, sbW, sbH, 3, 3, "S");
+
+  const sigData = fd.preStartSignature as string | undefined;
+  if (sigData && sigData.startsWith("data:image")) {
+    // Render the actual drawn signature inside the box
+    try {
+      pdf.addImage(sigData, "PNG", sbX + 2, sbY + 2, sbW - 4, sbH - 4);
+    } catch (_) {
+      // Fallback placeholder if image fails
+      rgb(pdf, T_GRAY);
+      pdf.setFont("helvetica", "italic");
+      pdf.setFontSize(8);
+      pdf.text("[Signature]", sbX + sbW / 2, sbY + sbH / 2 + 2.5, { align: "center" });
+    }
+  } else {
+    rgb(pdf, T_GRAY);
+    pdf.setFont("helvetica", "italic");
+    pdf.setFontSize(8);
+    pdf.text("[Signature]", sbX + sbW / 2, sbY + sbH / 2 + 2.5, { align: "center" });
+  }
+
+  // Name + date to the right of box
+  const siX = sbX + sbW + 10;
+  rgb(pdf, T_DARK);
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(15);
-  pdf.text("Statewide Escalator Cleaning_Prestart OH&S", margin, 48);
-  pdf.text("and Site Inspection", margin, 56);
-
-  // Date line
-  rgb(pdf, MID);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
-  pdf.text(fmt(fd.documentDate), margin, 65);
-
-  // Status badge
-  fillRgb(pdf, GREEN);
-  pdf.roundedRect(W - margin - 28, 60, 28, 8, 2, 2, "F");
-  rgb(pdf, WHITE);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(8);
-  pdf.text("Complete", W - margin - 14, 65.5, { align: "center" });
-
-  // Score row
-  const scoreY = 76;
-  coverRow(pdf, margin, scoreY, colW, [
-    ["Score", "9 / 9 (100%)"],
-    ["Flagged Items", fd.preStartConcernsDamage || fd.preStartAnyConcerns ? "1" : "0"],
-    ["Actions", "0"],
-  ]);
-
-  // Meta rows
-  let metaY = scoreY + 14;
-  metaRow(pdf, margin, metaY, colW, "Site Location", fd.preStartSiteLocation || "-");
-  metaY += 10;
-  const dateTimeStr = `${fmt(fd.documentDate)}${fd.startTime ? " " + fd.startTime + " AEST" : ""}`;
-  metaRow(pdf, margin, metaY, colW, "Date", dateTimeStr);
-  metaY += 10;
-  metaRow(pdf, margin, metaY, colW, "Prepared by", fd.preparedBy || "-");
-
-  // ── Page 2: Prestart Audit ─────────────────────────────────────────────────
-  pdf.addPage();
-  pageHeader(pdf, W, margin);
-
-  let y = 26;
-  auditSection(pdf, margin, y, colW, "PRESTART AUDIT", "1 / 1 (100%)");
-  y += 10;
-
-  y = auditTextRow(pdf, margin, y, colW, "What type(s) of works are you performing?", fd.preStartWorkType || "Escalator Cleaning");
-  y = auditTextRow(pdf, margin, y, colW, "What area will you be working?", fd.preStartArea || "-");
-  y = auditGreenRow(pdf, margin, y, colW, "What type of equipment are you working on?", fd.preStartEquipmentType || "-");
-  y = auditGreenRow(pdf, margin, y, colW, "Have you completed a visual safety inspection prior to any works being carried out?", fd.preStartVisualInspection ? "Yes" : "No");
-
-  // ── Page 3: Safety Audit ───────────────────────────────────────────────────
-  pdf.addPage();
-  pageHeader(pdf, W, margin);
-
-  y = 26;
-  auditSection(pdf, margin, y, colW, "SAFETY AUDIT", "8 / 8 (100%)");
-  y += 10;
-
-  y = auditGreenRow(pdf, margin, y, colW, "Do you have the appropriate PPE to undertake the works?", fd.preStartPpeAppropriate ? "Yes" : "No");
-  y = auditGreenRow(pdf, margin, y, colW, "Have you received a site induction?", fd.preStartSiteInduction ? "Yes" : "No");
-  y = auditGreenRow(pdf, margin, y, colW, "Have you checked if our machinery is in good working order?", fd.preStartMachineryGoodOrder ? "Yes" : "No");
-  y = auditGreenRow(pdf, margin, y, colW, "Have you completed your checks before mounting the machines on the escalator/travelator?", fd.preStartPreMountChecks ? "Yes" : "No");
-  y = auditGreenRow(pdf, margin, y, colW, "Have you checked if the escalator/travelator drives in reverse prior to starting works?", fd.preStartReverseCheck ? "Yes" : "No");
-  // Concerns/damage – No is green, Yes is flagged
-  y = auditGreenRow(pdf, margin, y, colW, "Is there any concerns or damaged on the escalator/travelator?", fd.preStartConcernsDamage ? "Yes" : "No", !fd.preStartConcernsDamage);
-  y += 6; // space for photo placeholder
-  fillRgb(pdf, LIGHT);
-  pdf.rect(margin, y, 28, 20, "F");
-  rgb(pdf, MID);
-  pdf.setFontSize(7);
-  pdf.setFont("helvetica", "italic");
-  pdf.text("Photo 1", margin + 2, y + 24);
-  y += 30;
-
-  y = auditGreenRow(pdf, margin, y, colW, "Have you used the maintenance barricades to ensure the escalator/travelator is blocked off?", fd.preStartBarricades ? "Yes" : "No");
-  y = auditGreenRow(pdf, margin, y, colW, "Do you have any concerns or comments?", fd.preStartAnyConcerns ? "Yes" : "No", !fd.preStartAnyConcerns);
-
-  // Worker name row
-  y += 2;
-  strokeRgb(pdf, BORDER);
-  pdf.setLineWidth(0.2);
-  pdf.line(margin, y, margin + colW, y);
-  y += 6;
-  rgb(pdf, DARK);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(9);
-  pdf.text("Name of workers", margin + 2, y);
-  rgb(pdf, MID);
-  pdf.setFont("helvetica", "normal");
-  pdf.text(fd.preStartWorkerNames || "-", margin + colW, y, { align: "right" });
-  y += 8;
-
-  // Supervisor sign-off
-  pdf.setFont("helvetica", "bold");
-  rgb(pdf, DARK);
-  pdf.setFontSize(9);
-  pdf.text("Supervisor to sign:", margin + 2, y);
-  y += 8;
-  // Signature box placeholder
-  fillRgb(pdf, LIGHT);
-  pdf.roundedRect(margin, y, 44, 20, 1, 1, "F");
-  rgb(pdf, MID);
-  pdf.setFont("helvetica", "italic");
-  pdf.setFontSize(8);
-  pdf.text("[Signature]", margin + 22, y + 12, { align: "center" });
-  rgb(pdf, DARK);
+  pdf.setFontSize(11);
+  pdf.text(fd.preStartWorkerNames || fd.preparedBy || "—", siX, sbY + 9);
+  rgb(pdf, T_GRAY);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8.5);
-  pdf.text(fd.preStartSupervisorName || fd.preparedBy || "-", margin + 50, y + 7);
-  const signDate = `${fmt(fd.documentDate)}${fd.startTime ? " " + fd.startTime + " AEST" : ""}`;
-  rgb(pdf, MID);
-  pdf.setFontSize(8);
-  pdf.text(signDate, margin + 50, y + 14);
+  const sigDate = fd.documentDate
+    ? `${fmt(fd.documentDate)}${fd.startTime ? " " + fd.startTime + " AEST" : ""}`
+    : "—";
+  pdf.text(sigDate, siX, sbY + 18);
 
-  // Page footer
-  addFooter(pdf, W, margin, "Statewide Escalator Cleaning Pty Ltd_JSEA&SWMS", 3);
+  y += SIG_H + 10;
+
+  // ── Footer on last page ──────────────────────────────────────────────────────
+  renderFooter();
 
   return pdf.output("blob");
 }
@@ -239,6 +465,17 @@ function pageHeader(pdf: jsPDF, W: number, margin: number) {
   pdf.text("Powered by SafetyCulture", W - margin, 6.5, { align: "right" });
 }
 
+function preStartPageHeader(pdf: jsPDF, W: number, margin: number) {
+  fillRgb(pdf, BLUE);
+  pdf.rect(0, 0, W, 10, "F");
+  rgb(pdf, WHITE);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(7);
+  pdf.text("Statewide Escalator Cleaning", margin, 6.5);
+  pdf.setFont("helvetica", "normal");
+  pdf.text("Pre-Start Safety Report", W - margin, 6.5, { align: "right" });
+}
+
 function auditSection(pdf: jsPDF, x: number, y: number, w: number, label: string, score: string) {
   fillRgb(pdf, DARK);
   pdf.rect(x, y, w, 9, "F");
@@ -281,7 +518,10 @@ function auditGreenRow(pdf: jsPDF, x: number, y: number, w: number, question: st
   const badgeW = 26;
   const badgeX = x + w - badgeW - 1;
   const badgeY = y + (rowH - 8) / 2;
-  fillRgb(pdf, isGreen ? GREEN : RED_C);
+
+  // N/A = neutral grey badge
+  const badgeColor = answer === "N/A" ? MID : (isGreen ? GREEN : RED_C);
+  fillRgb(pdf, badgeColor);
   pdf.roundedRect(badgeX, badgeY, badgeW, 8, 1, 1, "F");
   rgb(pdf, WHITE);
   pdf.setFont("helvetica", "bold");

@@ -298,41 +298,42 @@ export default function Timesheet() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className="flex justify-between items-start max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-50">
+      <section className="bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white px-6 py-8 md:px-10">
+        <div className="max-w-7xl mx-auto flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Timesheets & Pay</h1>
-            <p className="text-gray-500 text-sm mt-1">Weekly hours, days worked and gross pay — admin only.</p>
+            <p className="text-sm text-slate-400">Admin</p>
+            <h1 className="mt-1 text-2xl font-bold md:text-3xl">Timesheets & Pay</h1>
+            <p className="mt-2 text-sm text-slate-300">Weekly hours, days worked and gross pay — admin only.</p>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => load()} disabled={loading} className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+          <div className="flex gap-2 self-start md:self-auto">
+            <button onClick={() => load()} disabled={loading} className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white text-sm px-3 py-2.5 rounded-xl hover:bg-white/20 transition-all">
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </button>
-            <button onClick={handleExportPdf} disabled={generatingPdf} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
+            <button onClick={handleExportPdf} disabled={generatingPdf} className="inline-flex items-center gap-2 bg-white text-slate-900 font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-blue-50 shadow-md transition-all disabled:opacity-60">
               <Download className="h-4 w-4" />
               {generatingPdf ? "Generating…" : "Export PDF"}
             </button>
           </div>
         </div>
-      </header>
+      </section>
 
-      <div className="max-w-7xl mx-auto px-8 py-6 space-y-5">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 space-y-5">
 
         {/* Week picker + filter */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-wrap items-center gap-4">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <button onClick={() => setWeekStart((d) => addDays(d, -7))} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"><ChevronLeft className="h-4 w-4" /></button>
+            <button onClick={() => setWeekStart((d) => addDays(d, -7))} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600"><ChevronLeft className="h-4 w-4" /></button>
             <div className="text-center min-w-48">
-              <p className="text-sm font-semibold text-gray-900">{fmtDate(weekStart)} – {fmtDate(weekEnd)}</p>
-              <p className="text-xs text-gray-400">Week {Math.ceil(weekStart.getDate() / 7)}</p>
+              <p className="text-sm font-semibold text-slate-900">{fmtDate(weekStart)} – {fmtDate(weekEnd)}</p>
+              <p className="text-xs text-slate-400">Week {Math.ceil(weekStart.getDate() / 7)}</p>
             </div>
-            <button onClick={() => setWeekStart((d) => addDays(d, 7))} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"><ChevronRight className="h-4 w-4" /></button>
+            <button onClick={() => setWeekStart((d) => addDays(d, 7))} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600"><ChevronRight className="h-4 w-4" /></button>
           </div>
           <button onClick={() => setWeekStart(startOfWeek(new Date()))} className="text-xs text-blue-600 font-medium hover:underline">This week</button>
 
           <div className="ml-auto">
-            <select value={selectedEmp} onChange={(e) => setSelectedEmp(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select value={selectedEmp} onChange={(e) => setSelectedEmp(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="ALL">All Employees</option>
               {employees.map((e) => <option key={e.id} value={e.id}>{e.full_name ?? e.email}</option>)}
             </select>
@@ -346,48 +347,48 @@ export default function Timesheet() {
             { label: "Total Hours", value: fmtMins(totals.hours) },
             { label: "Total Gross Pay", value: `$${totals.pay.toFixed(2)}` },
           ].map((s) => (
-            <div key={s.label} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">{s.label}</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
+            <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide">{s.label}</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{s.value}</p>
             </div>
           ))}
         </div>
 
         {/* Per-employee table */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center py-20 text-gray-400 text-sm">
+            <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
               <RefreshCw className="animate-spin h-5 w-5 mr-2" /> Loading…
             </div>
           ) : (
             <>
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Employee</th>
-                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Days Worked</th>
-                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Total Hours</th>
-                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Hourly Rate</th>
-                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Gross Pay</th>
-                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Entries</th>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Employee</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Days Worked</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Total Hours</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Hourly Rate</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Gross Pay</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Entries</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {summaries.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-16 text-gray-400 text-sm">No data for this period.</td></tr>
+                    <tr><td colSpan={6} className="text-center py-16 text-slate-400 text-sm">No data for this period.</td></tr>
                   ) : summaries.map((s) => (
-                    <tr key={s.employee.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={s.employee.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
-                        <p className="font-semibold text-gray-900 text-sm">{s.employee.full_name ?? "—"}</p>
-                        <p className="text-xs text-gray-400">{s.employee.email}</p>
+                        <p className="font-semibold text-slate-900 text-sm">{s.employee.full_name ?? "—"}</p>
+                        <p className="text-xs text-slate-400">{s.employee.email}</p>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-700 font-medium">{s.daysWorked}</td>
-                      <td className="px-6 py-4 text-sm text-gray-700 font-medium">{fmtMins(s.totalMinutes)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="px-6 py-4 text-sm text-slate-700 font-medium">{s.daysWorked}</td>
+                      <td className="px-6 py-4 text-sm text-slate-700 font-medium">{fmtMins(s.totalMinutes)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
                         {s.employee.hourly_rate > 0 ? `$${s.employee.hourly_rate.toFixed(2)}/hr` : <span className="text-amber-600 text-xs">Not set</span>}
                       </td>
                       <td className="px-6 py-4 text-sm font-bold text-emerald-700">${s.grossPay.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{s.entries.length}</td>
+                      <td className="px-6 py-4 text-sm text-slate-500">{s.entries.length}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -395,7 +396,7 @@ export default function Timesheet() {
 
               {/* Expanded entries per employee */}
               {summaries.filter((s) => s.entries.length > 0).map((s) => (
-                <details key={s.employee.id} className="border-t border-gray-100">
+                <details key={s.employee.id} className="border-t border-slate-100">
                   <summary className="px-6 py-3 text-sm font-medium text-blue-600 cursor-pointer hover:bg-blue-50 select-none">
                     View {s.entries.length} entries for {s.employee.full_name ?? s.employee.email}
                   </summary>

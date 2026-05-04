@@ -4,8 +4,16 @@ import { createClient } from "@supabase/supabase-js";
 
 type Body = {
   to: string;
-  type: "approved" | "disabled";
+  type: "approved" | "disabled" | "booked" | "cancelled";
   name?: string;
+  job?: {
+    title: string;
+    clientName: string;
+    siteName?: string | null;
+    scheduledAt: string;
+    status: string;
+    notes?: string | null;
+  };
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -51,17 +59,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: "Admin access required" });
 
     // --- 4) Parse payload ---
-    const { to, type, name } = (req.body || {}) as Body;
+    const { to, type, name, job } = (req.body || {}) as Body;
     if (!to || !type) return res.status(400).json({ error: "Missing required fields: to, type" });
 
     const displayName = (name?.trim() || "there").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    const subject = type === "approved" ? "Your account has been approved" : "Your account has been disabled";
+    let subject = "";
+    let html = "";
 
-    const html =
-      type === "approved"
-        ? `<p>Hi ${displayName},<br/>Your account is approved. You can now log in.</p>`
-        : `<p>Hi ${displayName},<br/>Your account has been disabled. Please contact the admin team.</p>`;
+    if (type === "approved") {
+      subject = "Your account has been approved";
+      html = `<p>Hi ${displayName},<br/>Your account is approved. You can now log in.</p>`;
+    } else if (type === "disabled") {
+      subject = "Your account has been disabled";
+      html = `<p>Hi ${displayName},<br/>Your account has been disabled. Please contact the admin team.</p>`;
+    } else {
+      if (!job) return res.status(400).json({ error: "Missing job details for job email" });
+
+      const scheduledAt = new Date(job.scheduledAt);
+      const dateLabel = Number.isNaN(scheduledAt.getTime())
+        ? job.scheduledAt
+        : new Intl.DateTimeFormat("en-AU", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }).format(scheduledAt);
+      const site = (job.siteName?.trim() || "Not specified").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const title = job.title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const client = job.clientName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const status = job.status.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const notes = job.notes?.trim()
+        ? `<p><strong>Notes:</strong> ${job.notes.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`
+        : "";
+
+      subject = type === "booked" ? `Job booked: ${title}` : `Job cancelled: ${title}`;
+      html =
+        type === "booked"
+          ? `<p>Hi ${displayName},<br/>A job has been booked or updated for you.</p>
+             <p><strong>Job:</strong> ${title}</p>
+             <p><strong>Client:</strong> ${client}</p>
+             <p><strong>Site:</strong> ${site}</p>
+             <p><strong>Scheduled:</strong> ${dateLabel}</p>
+             <p><strong>Status:</strong> ${status}</p>
+             ${notes}`
+          : `<p>Hi ${displayName},<br/>The following job has been cancelled.</p>
+             <p><strong>Job:</strong> ${title}</p>
+             <p><strong>Client:</strong> ${client}</p>
+             <p><strong>Site:</strong> ${site}</p>
+             <p><strong>Scheduled:</strong> ${dateLabel}</p>
+             <p><strong>Status:</strong> ${status}</p>
+             ${notes}`;
+    }
 
     // --- 5) Send email ---
     try {

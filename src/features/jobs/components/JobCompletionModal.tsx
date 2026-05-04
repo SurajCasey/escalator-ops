@@ -186,15 +186,18 @@ export default function JobCompletionModal({ jobId, jobTitle, onClose, onComplet
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user.id;
 
-      // 1. Save completion record
-      const { error: compErr } = await supabase.from("job_completions").insert({
-        job_id:           jobId,
-        signature_data:   signatureData,
-        signed_by_name:   signedByName || null,
-        signed_by_role:   signedByRole || null,
-        completion_notes: notes || null,
-        completed_at:     new Date().toISOString(),
-      });
+      // 1. Save completion record — upsert so re-completing an undone job works
+      const { error: compErr } = await supabase.from("job_completions").upsert(
+        {
+          job_id:           jobId,
+          signature_data:   signatureData,
+          signed_by_name:   signedByName || null,
+          signed_by_role:   signedByRole || null,
+          completion_notes: notes || null,
+          completed_at:     new Date().toISOString(),
+        },
+        { onConflict: "job_id" }
+      );
       if (compErr) throw new Error(compErr.message);
 
       // 2. Save photos

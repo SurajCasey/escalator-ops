@@ -19,9 +19,10 @@ export type QuestionType =
   | "yes_no"        // boolean Yes / No / N/A toggle
   | "checkbox"      // single boolean checkbox
   | "select"        // single choice dropdown
+  | "radio"         // single choice as styled tile buttons
   | "multi_select"  // multiple choice checkboxes
   | "photo"         // photo upload
-  | "signature"     // signature capture (name + storage path)
+  | "signature"     // signature canvas pad
   | "worker_table"  // SWMS-style worker sign-off rows
   | "heading"       // non-input section divider
   | "instruction";  // informational text block

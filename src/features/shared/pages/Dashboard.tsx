@@ -387,7 +387,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 xl:p-8 space-y-6">
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden rounded-2xl bg-linear-to-br from-slate-900 via-blue-950 to-slate-800 text-white shadow-xl p-6 md:p-8">
+      <section className="relative overflow-hidden rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white shadow-xl p-6 md:p-8">
         {/* decorative blur blobs */}
         <div className="pointer-events-none absolute -top-16 -right-16 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" />
         <div className="pointer-events-none absolute bottom-0 left-24 h-40 w-40 rounded-full bg-indigo-500/15 blur-2xl" />

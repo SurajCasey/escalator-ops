@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import toast from "react-hot-toast";
 import {
-  Bell, Briefcase, Camera, ChevronLeft, ChevronRight,
-  Clock3, FileText, Globe2, Lock, Monitor, MoonStar,
-  Palette, Save, ShieldCheck, Sun, UserCircle2, Users,
+  Camera, ChevronLeft, ChevronRight,
+  Lock, Save, UserCircle2,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 
 type Role   = "ADMIN" | "EMPLOYEE";
-type Section = "profile" | "appearance" | "notifications" | "operations" | "security" | "legal";
-type ThemeOption = "system" | "ocean" | "forest" | "midnight";
+type Section = "profile" | "security";
 
 type ProfileRecord = {
   id: string;
@@ -19,61 +17,14 @@ type ProfileRecord = {
   status: string | null;
   avatar_url: string | null;
   phone: string | null;
-  job_title: string | null;
-  bio: string | null;
-};
-
-type UiPrefs = {
-  theme: ThemeOption;
-  compactMode: boolean;
-  emailDigest: boolean;
-  pushAlerts: boolean;
-  smsAlerts: boolean;
-  reportReminder: boolean;
-  defaultShift: "Morning" | "Midday" | "Night";
-  preStartChecklist: boolean;
-  travelBufferMinutes: number;
-  termsAccepted: boolean;
-  privacyAccepted: boolean;
-  safetyAccepted: boolean;
-  senderName: string;
-  replyTo: string;
-};
-
-const DEFAULT_PREFS: UiPrefs = {
-  theme: "system",
-  compactMode: false,
-  emailDigest: true,
-  pushAlerts: true,
-  smsAlerts: false,
-  reportReminder: true,
-  defaultShift: "Morning",
-  preStartChecklist: true,
-  travelBufferMinutes: 20,
-  termsAccepted: true,
-  privacyAccepted: true,
-  safetyAccepted: true,
-  senderName: "Statewide Escalator Cleaning",
-  replyTo: "ops@statewide.example",
 };
 
 const NAV_ITEMS: { key: Section; label: string; icon: React.ReactNode; desc: string }[] = [
-  { key: "profile",       label: "Profile",       icon: <UserCircle2 className="h-4 w-4" />, desc: "Photo, name & contact" },
-  { key: "appearance",    label: "Appearance",    icon: <Palette className="h-4 w-4" />,     desc: "Theme & interface" },
-  { key: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" />,        desc: "Alerts & reminders" },
-  { key: "operations",    label: "Operations",    icon: <Briefcase className="h-4 w-4" />,   desc: "Field defaults" },
-  { key: "security",      label: "Security",      icon: <Lock className="h-4 w-4" />,        desc: "Password & access" },
-  { key: "legal",         label: "Legal",         icon: <FileText className="h-4 w-4" />,    desc: "Terms & compliance" },
+  { key: "profile",  label: "Profile",  icon: <UserCircle2 className="h-4 w-4" />, desc: "Photo, name & contact" },
+  { key: "security", label: "Security", icon: <Lock className="h-4 w-4" />,        desc: "Password & account" },
 ];
 
-const THEME_OPTIONS: { key: ThemeOption; label: string; icon: React.ReactNode; swatch: string }[] = [
-  { key: "system",   label: "System",   icon: <Monitor className="h-4 w-4" />, swatch: "from-slate-100 via-slate-200 to-slate-300" },
-  { key: "ocean",    label: "Ocean",    icon: <Sun className="h-4 w-4" />,     swatch: "from-cyan-100 via-sky-200 to-blue-300" },
-  { key: "forest",   label: "Forest",   icon: <Globe2 className="h-4 w-4" />,  swatch: "from-emerald-100 via-lime-200 to-green-300" },
-  { key: "midnight", label: "Midnight", icon: <MoonStar className="h-4 w-4" />, swatch: "from-slate-700 via-slate-800 to-slate-950" },
-];
-
-/* ── helpers ─────────────────────────────────────────────────── */
+/* ── helpers ──────────────────────────────────────────────────── */
 function getInitials(v: string) {
   return v.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 }
@@ -84,21 +35,7 @@ function avatarBg(name: string | null) {
 function humanize(v: string) {
   return v.toLowerCase().split("_").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
 }
-function storageKey(uid: string) { return `ops-prefs:${uid}`; }
-function readPrefs(uid: string): UiPrefs {
-  try {
-    const raw = localStorage.getItem(storageKey(uid));
-    return raw ? { ...DEFAULT_PREFS, ...(JSON.parse(raw) as Partial<UiPrefs>) } : DEFAULT_PREFS;
-  } catch { return DEFAULT_PREFS; }
-}
-function savePrefs(uid: string, prefs: UiPrefs) {
-  localStorage.setItem(storageKey(uid), JSON.stringify(prefs));
-}
-function applyTheme(t: ThemeOption) {
-  document.documentElement.setAttribute("data-ops-theme", t);
-}
 
-/** Read a file as a base64 data-url via FileReader */
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -112,9 +49,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-/** Resize a base64 data-url to maxSize×maxSize, returns resized jpeg data-url.
- *  Falls back to the original data-url if canvas is unavailable. */
-function resizeDataUrl(dataUrl: string, maxSize = 300): Promise<string> {
+function resizeDataUrl(dataUrl: string, maxSize = 400): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -125,28 +60,25 @@ function resizeDataUrl(dataUrl: string, maxSize = 300): Promise<string> {
         const canvas = document.createElement("canvas");
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext("2d");
-        if (!ctx) { resolve(dataUrl); return; }          // fallback: original
+        if (!ctx) { resolve(dataUrl); return; }
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, 0, 0, w, h);
         const out = canvas.toDataURL("image/jpeg", 0.92);
-        resolve(out && out !== "data:," ? out : dataUrl); // fallback: original
-      } catch {
-        resolve(dataUrl);                                 // fallback: original
-      }
+        resolve(out && out !== "data:," ? out : dataUrl);
+      } catch { resolve(dataUrl); }
     };
-    img.onerror = () => resolve(dataUrl);                 // fallback: original
+    img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
   });
 }
 
-/** Convert a File to a resized jpeg data-url (max 300×300). */
-async function processImageFile(file: File, maxSize = 300): Promise<string> {
+async function processImageFile(file: File): Promise<string> {
   const dataUrl = await readFileAsDataUrl(file);
-  return resizeDataUrl(dataUrl, maxSize);
+  return resizeDataUrl(dataUrl, 400);
 }
 
-/* ── sub-components ──────────────────────────────────────────── */
+/* ── sub-components ───────────────────────────────────────────── */
 function SectionCard({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -172,41 +104,31 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 function Inp(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition ${props.className ?? ""}`} />;
-}
-function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 transition ${props.className ?? ""}`} />;
-}
-function Txt(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition ${props.className ?? ""}`} />;
-}
-
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button type="button" onClick={() => onChange(!on)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${on ? "bg-blue-600" : "bg-slate-200"}`}>
-      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
-    </button>
+    <input
+      {...props}
+      className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition ${props.className ?? ""}`}
+    />
   );
 }
 
-function ToggleRow({ title, desc, value, onChange }: { title: string; desc: string; value: boolean; onChange: (v: boolean) => void }) {
+function Txt(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3">
-      <div>
-        <p className="text-sm font-medium text-slate-900">{title}</p>
-        <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
-      </div>
-      <Toggle on={value} onChange={onChange} />
-    </div>
+    <textarea
+      {...props}
+      className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition ${props.className ?? ""}`}
+    />
   );
 }
 
 function SaveBtn({ loading, onClick, label = "Save Changes" }: { loading: boolean; onClick: () => void; label?: string }) {
   return (
     <div className="flex justify-end pt-4 border-t border-slate-100">
-      <button onClick={onClick} disabled={loading}
-        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition">
+      <button
+        onClick={onClick}
+        disabled={loading}
+        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition"
+      >
         <Save className="h-4 w-4" />
         {loading ? "Saving…" : label}
       </button>
@@ -216,24 +138,22 @@ function SaveBtn({ loading, onClick, label = "Save Changes" }: { loading: boolea
 
 /* ═══════════════════════════════════════════════════════════════ */
 export default function Settings() {
-  const [active, setActive]         = useState<Section>("profile");
+  const [active, setActive]               = useState<Section>("profile");
   const [mobileShowContent, setMobileShowContent] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<ProfileRecord | null>(null);
-  const [prefs, setPrefs]     = useState<UiPrefs>(DEFAULT_PREFS);
-  const [saving, setSaving]   = useState<Section | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [profile, setProfile]             = useState<ProfileRecord | null>(null);
+  const [saving, setSaving]               = useState<Section | null>(null);
 
   /* profile fields */
-  const [fullName,  setFullName]  = useState("");
-  const [phone,     setPhone]     = useState("");
-  const [jobTitle,  setJobTitle]  = useState("");
-  const [bio,       setBio]       = useState("");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [fullName,      setFullName]      = useState("");
+  const [phone,         setPhone]         = useState("");
+  const [avatarUrl,     setAvatarUrl]     = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
-  /* security */
+  /* security fields */
   const [newPw,  setNewPw]  = useState("");
   const [confPw, setConfPw] = useState("");
+
   const fileRef = useRef<HTMLInputElement>(null);
 
   /* load */
@@ -246,7 +166,7 @@ export default function Settings() {
 
       const { data: p } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role, status, avatar_url, phone, job_title, bio")
+        .select("id, full_name, email, role, status, avatar_url, phone")
         .eq("id", session.user.id)
         .single<ProfileRecord>();
 
@@ -254,58 +174,44 @@ export default function Settings() {
         setProfile(p);
         setFullName(p.full_name ?? "");
         setPhone(p.phone ?? "");
-        setJobTitle(p.job_title ?? "");
-        setBio(p.bio ?? "");
         setAvatarUrl(p.avatar_url ?? null);
-        const stored = readPrefs(p.id);
-        setPrefs(stored);
-        applyTheme(stored.theme);
       }
       setLoading(false);
     })();
   }, []);
 
-  useEffect(() => { applyTheme(prefs.theme); }, [prefs.theme]);
-
-  const isAdmin = profile?.role === "ADMIN";
-
   const profileCompletion = useMemo(() => {
-    const checks = [fullName.trim().length > 0, !!profile?.email, phone.trim().length > 0, !!(avatarPreview ?? avatarUrl)];
+    const checks = [
+      fullName.trim().length > 0,
+      !!profile?.email,
+      phone.trim().length > 0,
+      !!(avatarPreview ?? avatarUrl),
+    ];
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
   }, [fullName, profile?.email, phone, avatarPreview, avatarUrl]);
 
-  /* avatar pick */
+  /* avatar */
   const handleAvatarPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    /* reset so the same file can be re-picked after an error */
     if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
 
-    /* HEIC / HEIF from iPhones — browsers can't decode these natively */
     const isHeic = file.type === "image/heic" || file.type === "image/heif"
       || file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif");
     if (isHeic) {
-      toast.error("iPhone HEIC photos aren't supported. Please convert to JPG or PNG first (AirDrop to Mac, then export, or use a free converter).");
+      toast.error("iPhone HEIC photos aren't supported. Convert to JPG or PNG first.");
       return;
     }
+    if (!file.type.startsWith("image/")) { toast.error("Please pick an image file (JPG, PNG, WebP)."); return; }
+    if (file.size > 10 * 1024 * 1024)   { toast.error("Photo must be under 10 MB."); return; }
 
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please pick an image file (JPG, PNG, GIF, WebP).");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Photo must be under 10 MB.");
-      return;
-    }
-
-    const toastId = toast.loading("Processing photo…");
+    const id = toast.loading("Processing photo…");
     try {
-      const resized = await processImageFile(file, 400);
+      const resized = await processImageFile(file);
       setAvatarPreview(resized);
-      toast.success("Photo ready — save profile to apply.", { id: toastId });
+      toast.success("Photo ready — save profile to apply.", { id });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      toast.error(`Could not read image file: ${msg}`, { id: toastId });
+      toast.error(`Could not read image: ${err instanceof Error ? err.message : "Unknown error"}`, { id });
     }
   };
 
@@ -317,9 +223,7 @@ export default function Settings() {
 
     const patch: Record<string, unknown> = {
       full_name: fullName.trim(),
-      phone:     phone.trim()    || null,
-      job_title: jobTitle.trim() || null,
-      bio:       bio.trim()      || null,
+      phone:     phone.trim() || null,
     };
     if (avatarPreview) patch.avatar_url = avatarPreview;
 
@@ -328,20 +232,13 @@ export default function Settings() {
 
     if (avatarPreview) setAvatarUrl(avatarPreview);
     setAvatarPreview(null);
-    setProfile((p) => p ? { ...p, full_name: fullName.trim(), phone: phone.trim() || null, job_title: jobTitle.trim() || null, bio: bio.trim() || null, avatar_url: avatarPreview ?? p.avatar_url } : p);
+    setProfile((p) => p ? {
+      ...p,
+      full_name: fullName.trim(),
+      phone:     phone.trim() || null,
+      avatar_url: avatarPreview ?? p.avatar_url,
+    } : p);
     toast.success("Profile saved!");
-    setSaving(null);
-  };
-
-  /* save UI prefs */
-  const saveUiPrefs = (section: Section, msg: string, patch?: Partial<UiPrefs>) => {
-    if (!profile) return;
-    setSaving(section);
-    const next = patch ? { ...prefs, ...patch } : prefs;
-    setPrefs(next);
-    savePrefs(profile.id, next);
-    if (section === "appearance") applyTheme(next.theme);
-    toast.success(msg);
     setSaving(null);
   };
 
@@ -360,13 +257,14 @@ export default function Settings() {
   const displayAvatar = avatarPreview ?? avatarUrl;
   const displayName   = fullName || profile?.full_name || "Team Member";
 
+  /* ── loading ── */
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 p-8 animate-pulse space-y-5">
         <div className="h-36 rounded-2xl bg-slate-200" />
         <div className="grid gap-5 xl:grid-cols-[280px_1fr]">
-          <div className="h-96 rounded-2xl bg-slate-200" />
-          <div className="h-96 rounded-2xl bg-slate-200" />
+          <div className="h-64 rounded-2xl bg-slate-200" />
+          <div className="h-64 rounded-2xl bg-slate-200" />
         </div>
       </div>
     );
@@ -375,7 +273,9 @@ export default function Settings() {
   if (!profile) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-5 py-3">Unable to load settings.</p>
+        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-5 py-3">
+          Unable to load settings.
+        </p>
       </div>
     );
   }
@@ -383,10 +283,10 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-slate-50">
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <div className="bg-linear-to-br from-slate-900 via-slate-800 to-blue-950 text-white px-6 py-8 md:px-10">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center gap-6">
-          {/* Avatar preview */}
+      {/* ── Hero ──────────────────────────────────────────────── */}
+      <div className="bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white px-6 py-8 md:px-10">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center gap-6">
+          {/* Avatar */}
           <div className="relative shrink-0">
             <div className="h-20 w-20 rounded-2xl overflow-hidden shadow-lg">
               {displayAvatar
@@ -407,17 +307,22 @@ export default function Settings() {
           <div className="flex-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Account Settings</p>
             <h1 className="text-2xl md:text-3xl font-extrabold mt-1">{displayName}</h1>
-            <p className="text-sm text-slate-300 mt-0.5">{profile.email} · <span className="capitalize">{humanize(profile.role)}</span></p>
+            <p className="text-sm text-slate-300 mt-0.5">
+              {profile.email} · <span className="capitalize">{humanize(profile.role)}</span>
+            </p>
           </div>
 
-          {/* Completion ring */}
+          {/* Profile completion ring */}
           <div className="shrink-0 flex flex-col items-center gap-1">
             <div className="relative h-16 w-16">
               <svg viewBox="0 0 36 36" className="-rotate-90 h-16 w-16">
                 <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3" />
-                <circle cx="18" cy="18" r="15" fill="none" stroke={profileCompletion === 100 ? "#34d399" : "#60a5fa"}
+                <circle
+                  cx="18" cy="18" r="15" fill="none"
+                  stroke={profileCompletion === 100 ? "#34d399" : "#60a5fa"}
                   strokeWidth="3" strokeLinecap="round"
-                  strokeDasharray={`${(profileCompletion / 100) * 94.2} 94.2`} />
+                  strokeDasharray={`${(profileCompletion / 100) * 94.2} 94.2`}
+                />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="text-xs font-bold text-white">{profileCompletion}%</span>
@@ -428,9 +333,9 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 md:px-8 py-6">
+      <div className="max-w-4xl mx-auto px-4 md:px-8 py-6">
 
-        {/* ── Mobile menu list (shown when no section is open) ─── */}
+        {/* ── Mobile: section list ─────────────────────────────── */}
         <div className={`xl:hidden space-y-2 ${mobileShowContent ? "hidden" : "block"}`}>
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 px-1 mb-3">Settings</p>
           {NAV_ITEMS.map((item) => (
@@ -451,10 +356,10 @@ export default function Settings() {
           ))}
         </div>
 
-        {/* ── Main layout: side nav (desktop) + content ────────── */}
-        <div className={`xl:grid xl:grid-cols-[240px_1fr] xl:gap-6 ${mobileShowContent ? "block" : "hidden xl:grid"}`}>
+        {/* ── Desktop: sidebar + content ───────────────────────── */}
+        <div className={`xl:grid xl:grid-cols-[220px_1fr] xl:gap-6 ${mobileShowContent ? "block" : "hidden xl:grid"}`}>
 
-          {/* Desktop side nav */}
+          {/* Sidebar */}
           <aside className="hidden xl:block space-y-2">
             {NAV_ITEMS.map((item) => (
               <button
@@ -476,10 +381,10 @@ export default function Settings() {
             ))}
           </aside>
 
-          {/* ── Content ────────────────────────────────────────── */}
+          {/* Content */}
           <div className="space-y-4 min-w-0">
 
-            {/* Mobile breadcrumb / back button */}
+            {/* Mobile breadcrumb */}
             <div className="xl:hidden flex items-center gap-2 pb-1">
               <button
                 onClick={() => setMobileShowContent(false)}
@@ -494,12 +399,13 @@ export default function Settings() {
               </span>
             </div>
 
-            {/* PROFILE */}
+            {/* ── PROFILE ── */}
             {active === "profile" && (
-              <SectionCard title="Profile & Identity" desc="Your details appear in the People directory and job assignments.">
-
-                {/* Photo upload */}
-                <Field label="Profile Photo" hint="PNG or JPG, max 5 MB — saved across all devices.">
+              <SectionCard
+                title="Profile & Identity"
+                desc="Your details appear in the People directory, job assignments, and reports."
+              >
+                <Field label="Profile Photo" hint="PNG or JPG, max 10 MB — saved to your account.">
                   <div className="flex items-center gap-4">
                     <div className="h-20 w-20 rounded-2xl overflow-hidden border-2 border-slate-200 shrink-0">
                       {displayAvatar
@@ -518,34 +424,35 @@ export default function Settings() {
                       {avatarPreview && (
                         <p className="text-xs text-amber-600 mt-1.5">New photo ready — save to apply.</p>
                       )}
-                      <p className="text-xs text-slate-400 mt-1">Shown in People directory and job cards.</p>
                     </div>
                   </div>
                 </Field>
 
-                <Field label="Full Name" hint="Displayed in schedules, approvals, and the People page.">
-                  <Inp value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your full name" />
+                <Field label="Full Name" hint="Displayed in schedules, approvals, and reports.">
+                  <Inp
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Your full name"
+                  />
                 </Field>
 
-                <Field label="Email" hint="Login email — cannot be changed here.">
+                <Field label="Email" hint="Login email — contact your admin to change this.">
                   <Inp value={profile.email ?? ""} disabled className="opacity-60 cursor-not-allowed" />
                 </Field>
 
                 <Field label="Phone" hint="Used for dispatch callbacks and emergency contact.">
-                  <Inp value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+61 4 0000 0000" />
+                  <Inp
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+61 4 0000 0000"
+                  />
                 </Field>
 
-                <Field label="Job Title" hint="e.g. Operations Manager, Field Technician.">
-                  <Inp value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="Field Technician" />
-                </Field>
-
-                <Field label="Bio" hint="Short internal note about your role or responsibilities.">
-                  <Txt rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Managing Sydney CBD escalator cleaning schedules…" />
-                </Field>
-
-                {/* Profile preview card */}
+                {/* Live preview */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Preview — how you appear in People</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                    Preview — how you appear in People
+                  </p>
                   <div className="flex items-center gap-3">
                     <div className="h-11 w-11 rounded-xl overflow-hidden shrink-0">
                       {displayAvatar
@@ -555,7 +462,7 @@ export default function Settings() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{displayName}</p>
-                      <p className="text-xs text-slate-400">{profile.email} {jobTitle ? `· ${jobTitle}` : ""}</p>
+                      <p className="text-xs text-slate-400">{profile.email}</p>
                     </div>
                     <span className="ml-auto text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                       {humanize(profile.role)}
@@ -567,107 +474,34 @@ export default function Settings() {
               </SectionCard>
             )}
 
-            {/* APPEARANCE */}
-            {active === "appearance" && (
-              <SectionCard title="Appearance" desc="Choose how the portal looks during dispatch, planning, and reporting.">
-                <Field label="Theme" hint="Applies immediately across all pages.">
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {THEME_OPTIONS.map((opt) => {
-                      const sel = prefs.theme === opt.key;
-                      return (
-                        <button key={opt.key} onClick={() => setPrefs((p) => ({ ...p, theme: opt.key }))}
-                          className={`rounded-2xl border p-3 text-left transition ${sel ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200 hover:border-slate-300 bg-white"}`}>
-                          <div className={`h-16 rounded-xl bg-linear-to-br ${opt.swatch}`} />
-                          <div className="mt-2 flex items-center gap-1.5 text-sm font-medium text-slate-800">
-                            {opt.icon}{opt.label}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Field>
-                <ToggleRow title="Compact Interface" desc="Reduce spacing in tables and cards to fit more data onscreen."
-                  value={prefs.compactMode} onChange={(v) => setPrefs((p) => ({ ...p, compactMode: v }))} />
-                <SaveBtn loading={saving === "appearance"} onClick={() => saveUiPrefs("appearance", "Appearance saved.")} />
-              </SectionCard>
-            )}
-
-            {/* NOTIFICATIONS */}
-            {active === "notifications" && (
-              <SectionCard title="Notifications" desc="Control alerts and reminders from the operations workflow.">
-                <ToggleRow title="Daily Email Digest" desc="One summary email per day covering jobs, overdue tasks, and approvals."
-                  value={prefs.emailDigest} onChange={(v) => setPrefs((p) => ({ ...p, emailDigest: v }))} />
-                <ToggleRow title="Push Alerts" desc="In-app alerts when schedules change or jobs are assigned."
-                  value={prefs.pushAlerts} onChange={(v) => setPrefs((p) => ({ ...p, pushAlerts: v }))} />
-                <ToggleRow title="SMS Alerts" desc="Urgent dispatch changes and access issues via SMS."
-                  value={prefs.smsAlerts} onChange={(v) => setPrefs((p) => ({ ...p, smsAlerts: v }))} />
-                <ToggleRow title="Report Reminder" desc="Prompt at end of shift to finish any incomplete reports."
-                  value={prefs.reportReminder} onChange={(v) => setPrefs((p) => ({ ...p, reportReminder: v }))} />
-                {isAdmin && (
-                  <Field label="Reply-To Address" hint="Admin inbox for system-generated emails.">
-                    <Inp value={prefs.replyTo} onChange={(e) => setPrefs((p) => ({ ...p, replyTo: e.target.value }))} />
-                  </Field>
-                )}
-                <SaveBtn loading={saving === "notifications"} onClick={() => saveUiPrefs("notifications", "Notification preferences saved.")} />
-              </SectionCard>
-            )}
-
-            {/* OPERATIONS */}
-            {active === "operations" && (
-              <SectionCard title={isAdmin ? "Operations Defaults" : "Work Preferences"} desc="Tune defaults for scheduling, route planning, and reporting.">
-                <Field label="Default Shift" hint="Preselects shift context in scheduling flows.">
-                  <Sel value={prefs.defaultShift} onChange={(e) => setPrefs((p) => ({ ...p, defaultShift: e.target.value as UiPrefs["defaultShift"] }))}>
-                    <option>Morning</option><option>Midday</option><option>Night</option>
-                  </Sel>
-                </Field>
-                <Field label="Travel Buffer" hint="Buffer between jobs for access setup and transit.">
-                  <Sel value={String(prefs.travelBufferMinutes)} onChange={(e) => setPrefs((p) => ({ ...p, travelBufferMinutes: Number(e.target.value) }))}>
-                    <option value="10">10 minutes</option>
-                    <option value="20">20 minutes</option>
-                    <option value="30">30 minutes</option>
-                    <option value="45">45 minutes</option>
-                  </Sel>
-                </Field>
-                <ToggleRow title="Pre-start Checklist Required" desc="Require a site readiness check before marking a job in progress."
-                  value={prefs.preStartChecklist} onChange={(v) => setPrefs((p) => ({ ...p, preStartChecklist: v }))} />
-                {isAdmin && (
-                  <>
-                    <Field label="Email Sender Name" hint="Name shown in admin approval and notification emails.">
-                      <Inp value={prefs.senderName} onChange={(e) => setPrefs((p) => ({ ...p, senderName: e.target.value }))} />
-                    </Field>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      {[
-                        { label: "Response Target", value: "15 min", note: "Avg callback target for access issues", icon: <Clock3 className="h-4 w-4" /> },
-                        { label: "Field Teams", value: "8", note: "Active crews expected this week", icon: <Users className="h-4 w-4" /> },
-                        { label: "Compliance", value: "98%", note: "SWMS and pre-start completion rate", icon: <ShieldCheck className="h-4 w-4" /> },
-                      ].map((m) => (
-                        <div key={m.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                          <div className="flex items-center justify-between text-slate-400">{m.icon}<span className="text-xs uppercase tracking-wide font-semibold">{m.label}</span></div>
-                          <p className="mt-2 text-2xl font-bold text-slate-900">{m.value}</p>
-                          <p className="text-xs text-slate-500 mt-1">{m.note}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-                <SaveBtn loading={saving === "operations"} onClick={() => saveUiPrefs("operations", "Operations defaults saved.")} />
-              </SectionCard>
-            )}
-
-            {/* SECURITY */}
+            {/* ── SECURITY ── */}
             {active === "security" && (
-              <SectionCard title="Security" desc="Keep your credentials current and your account protected.">
+              <SectionCard
+                title="Security"
+                desc="Keep your credentials current and your account protected."
+              >
                 <Field label="Change Password" hint="Must be at least 8 characters.">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <Inp type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="New password" />
-                    <Inp type="password" value={confPw} onChange={(e) => setConfPw(e.target.value)} placeholder="Confirm password" />
+                    <Inp
+                      type="password"
+                      value={newPw}
+                      onChange={(e) => setNewPw(e.target.value)}
+                      placeholder="New password"
+                    />
+                    <Inp
+                      type="password"
+                      value={confPw}
+                      onChange={(e) => setConfPw(e.target.value)}
+                      placeholder="Confirm password"
+                    />
                   </div>
                 </Field>
+
                 <div className="grid gap-3 md:grid-cols-3">
                   {[
-                    { label: "Auth Method", value: "Email / Password", note: "Password-based login is active." },
-                    { label: "Account Status", value: profile.status ?? "ACTIVE", note: "Controlled by admin approval." },
-                    { label: "Session", value: "Protected", note: "Active verified session required." },
+                    { label: "Auth Method",     value: "Email / Password",   note: "Password-based login is active." },
+                    { label: "Account Status",  value: profile.status ?? "ACTIVE", note: "Controlled by admin approval." },
+                    { label: "Session",         value: "Protected",          note: "Active verified session required." },
                   ].map((s) => (
                     <div key={s.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                       <p className="text-xs uppercase tracking-wide font-semibold text-slate-400">{s.label}</p>
@@ -676,41 +510,8 @@ export default function Settings() {
                     </div>
                   ))}
                 </div>
-                <SaveBtn loading={saving === "security"} onClick={savePassword} label="Update Password" />
-              </SectionCard>
-            )}
 
-            {/* LEGAL */}
-            {active === "legal" && (
-              <SectionCard title="Terms, Privacy & Compliance" desc="Keep the app aligned with field safety, privacy, and obligations.">
-                <div className="grid gap-4 md:grid-cols-3">
-                  {[
-                    { key: "termsAccepted",   title: "Terms & Conditions", desc: "Use of the portal must follow company scheduling, reporting, and access-control rules." },
-                    { key: "privacyAccepted", title: "Privacy Notice",     desc: "Profile data, site notes, and schedule history are used for operational delivery and auditing." },
-                    { key: "safetyAccepted",  title: "Safety Commitment",  desc: "Teams must complete pre-start checks, use PPE, and log site hazards before commencing work." },
-                  ].map((card) => (
-                    <div key={card.key} className="rounded-xl border border-slate-200 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{card.title}</p>
-                          <p className="text-xs text-slate-500 mt-1">{card.desc}</p>
-                        </div>
-                        <Toggle on={prefs[card.key as keyof UiPrefs] as boolean}
-                          onChange={(v) => setPrefs((p) => ({ ...p, [card.key]: v }))} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-600 space-y-2">
-                  <p className="font-medium text-slate-800">Operational Terms Summary</p>
-                  <ul className="space-y-1 text-xs list-disc list-inside text-slate-500">
-                    <li>Schedule data must only be used for approved work allocation and client communication.</li>
-                    <li>Profile photos are for internal identification only.</li>
-                    <li>SWMS and pre-start records must be completed on the day of service.</li>
-                    <li>Admins must maintain accurate active approval lists.</li>
-                  </ul>
-                </div>
-                <SaveBtn loading={saving === "legal"} onClick={() => saveUiPrefs("legal", "Legal acknowledgements saved.")} />
+                <SaveBtn loading={saving === "security"} onClick={savePassword} label="Update Password" />
               </SectionCard>
             )}
 

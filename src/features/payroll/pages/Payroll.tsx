@@ -53,6 +53,10 @@ function addDays(d: Date, n: number) {
   const r = new Date(d); r.setDate(r.getDate() + n); return r;
 }
 function isoDate(d: Date) { return d.toISOString().slice(0, 10); }
+/** Returns YYYY-MM-DD in LOCAL time (avoids UTC-shift issues in AU timezone) */
+function localIsoDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 /* ── PDF Generator ───────────────────────────────────────── */
 function downloadPayslip(p: PaymentRecord) {
@@ -405,7 +409,7 @@ export default function Payroll() {
       if (!uid) return;
       setUserId(uid);
       supabase.from("profiles").select("role").eq("id", uid).single().then(({ data: p }) => {
-        const admin = p?.role === "admin";
+        const admin = p?.role === "ADMIN";
         setIsAdmin(admin);
         load(uid, admin);
       });
@@ -413,10 +417,11 @@ export default function Payroll() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    return payments.filter((p) => {
-      const start = new Date(p.period_start);
-      return start >= monthStart && start <= monthEnd;
-    });
+    // Compare as local-date strings to avoid UTC vs local-time mismatch in AU timezone.
+    // e.g. new Date("2026-05-01") parses as UTC midnight = April 30 local (AEST +10)
+    const startKey = localIsoDate(monthStart);
+    const endKey   = localIsoDate(monthEnd);
+    return payments.filter((p) => p.period_start >= startKey && p.period_start <= endKey);
   }, [payments, monthStart, monthEnd]);
 
   const stats = useMemo(() => ({
@@ -440,7 +445,7 @@ export default function Payroll() {
   const monthLabel = periodFilter.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6 xl:p-8 space-y-6">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 xl:p-8 space-y-6">
 
       {/* Header */}
       <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white p-6 md:p-8 shadow-lg">

@@ -3,7 +3,7 @@ import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
 import {
   Banknote, CheckCircle2, Eye, ImageOff,
-  Plus, Receipt, Search, User, X, XCircle,
+  Pencil, Plus, Receipt, Search, Trash2, User, X, XCircle,
 } from "lucide-react";
 
 /* ── Types ───────────────────────────────────────────────── */
@@ -91,8 +91,17 @@ function resizeToBase64(file: File, maxPx = 900): Promise<string> {
   });
 }
 
-/* ── Submit Modal (employee) ─────────────────────────────── */
-function SubmitModal({ open, userId, onClose, onSaved }: { open: boolean; userId: string; onClose: () => void; onSaved: () => void }) {
+/* ── Submit / Edit Modal (employee) ─────────────────────── */
+type SubmitModalProps = {
+  open: boolean;
+  userId: string;
+  onClose: () => void;
+  onSaved: () => void;
+  editing?: ReceiptRow | null;
+};
+
+function SubmitModal({ open, userId, onClose, onSaved, editing = null }: SubmitModalProps) {
+  const isEdit = !!editing;
   const [category, setCategory] = useState<ReceiptCategory>("FUEL");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -105,13 +114,24 @@ function SubmitModal({ open, userId, onClose, onSaved }: { open: boolean; userId
 
   useEffect(() => {
     if (!open) return;
-    setCategory("FUEL"); setAmount(""); setDate(new Date().toISOString().slice(0, 10));
-    setJobId(""); setNotes(""); setPhotoPreview(null); setPhotoData(null);
+    // Pre-populate from editing receipt or reset for new
+    if (editing) {
+      setCategory(editing.category);
+      setAmount(String(editing.amount));
+      setDate(editing.receipt_date);
+      setJobId(editing.job_id ?? "");
+      setNotes(editing.notes ?? "");
+      setPhotoPreview(editing.photo_data);
+      setPhotoData(editing.photo_data);
+    } else {
+      setCategory("FUEL"); setAmount(""); setDate(new Date().toISOString().slice(0, 10));
+      setJobId(""); setNotes(""); setPhotoPreview(null); setPhotoData(null);
+    }
     supabase.from("jobs").select("id, title")
       .in("status", ["SCHEDULED", "IN_PROGRESS", "COMPLETED"])
       .order("scheduled_at", { ascending: false }).limit(50)
       .then(({ data }) => setJobs(data ?? []));
-  }, [open]);
+  }, [open, editing]);
 
   if (!open) return null;
 
@@ -127,13 +147,26 @@ function SubmitModal({ open, userId, onClose, onSaved }: { open: boolean; userId
     const amt = parseFloat(amount);
     if (!amount || isNaN(amt) || amt <= 0) { toast.error("Enter a valid amount."); return; }
     setSaving(true);
-    const { error } = await supabase.from("receipts").insert({
-      employee_id: userId, job_id: jobId || null, category,
-      amount: amt, receipt_date: date, photo_data: photoData, notes: notes.trim() || null,
-    });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Receipt submitted."); onSaved(); onClose();
+
+    if (isEdit && editing) {
+      const { error } = await supabase.from("receipts").update({
+        category, amount: amt, receipt_date: date,
+        job_id: jobId || null, notes: notes.trim() || null, photo_data: photoData,
+      }).eq("id", editing.id);
+      setSaving(false);
+      if (error) { toast.error(error.message); return; }
+      toast.success("Receipt updated.");
+    } else {
+      const { error } = await supabase.from("receipts").insert({
+        employee_id: userId, job_id: jobId || null, category,
+        amount: amt, receipt_date: date, photo_data: photoData, notes: notes.trim() || null,
+      });
+      setSaving(false);
+      if (error) { toast.error(error.message); return; }
+      toast.success("Receipt submitted.");
+    }
+
+    onSaved(); onClose();
   };
 
   return (
@@ -141,7 +174,7 @@ function SubmitModal({ open, userId, onClose, onSaved }: { open: boolean; userId
       <div className="absolute inset-0 bg-slate-950/40" onClick={onClose} />
       <div className="relative z-10 w-full max-w-lg rounded-2xl bg-white border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white">
-          <h2 className="text-lg font-semibold text-slate-900">Submit Receipt</h2>
+          <h2 className="text-lg font-semibold text-slate-900">{isEdit ? "Edit Receipt" : "Submit Receipt"}</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -204,7 +237,7 @@ function SubmitModal({ open, userId, onClose, onSaved }: { open: boolean; userId
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
-              {saving ? "Submitting…" : "Submit Receipt"}
+              {saving ? (isEdit ? "Saving…" : "Submitting…") : (isEdit ? "Save Changes" : "Submit Receipt")}
             </button>
           </div>
         </form>
@@ -273,6 +306,7 @@ export default function Receipts() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingReceipt, setEditingReceipt] = useState<ReceiptRow | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -283,8 +317,8 @@ export default function Receipts() {
   /* ── Data loading ──────────────────────────────────────── */
   const load = useCallback(async (uid: string, admin: boolean) => {
     setLoading(true);
-    const query = supabase.from("receipts").select("*").order("created_at", { ascending: false });
-    if (!admin) query.eq("employee_id", uid);
+    let query = supabase.from("receipts").select("*").order("created_at", { ascending: false });
+    if (!admin) query = query.eq("employee_id", uid);
     const { data: rData, error } = await query;
     if (error) { toast.error(error.message); setLoading(false); return; }
 
@@ -320,7 +354,7 @@ export default function Receipts() {
       if (!uid) return;
       setUserId(uid);
       supabase.from("profiles").select("role").eq("id", uid).single().then(({ data: p }) => {
-        const admin = p?.role === "admin";
+        const admin = p?.role === "ADMIN";
         setIsAdmin(admin);
         load(uid, admin);
       });
@@ -406,14 +440,22 @@ export default function Receipts() {
     setReceipts((prev) => prev.map((r) => ids.includes(r.id) ? { ...r, status: "PAID" } : r));
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this receipt? This cannot be undone.")) return;
+    const { error } = await supabase.from("receipts").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Receipt deleted.");
+    setReceipts((prev) => prev.filter((r) => r.id !== id));
+  };
+
   const reload = () => { if (userId) load(userId, isAdmin); };
 
   /* ── Render ────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6 xl:p-8 space-y-6">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 xl:p-8 space-y-6">
 
       {/* ── Header ───────────────────────────────────────── */}
-      <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-emerald-900 text-white p-6 md:p-8 shadow-lg">
+      <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white p-6 md:p-8 shadow-lg">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm text-slate-300">{isAdmin ? "Expense Management" : "My Expenses"}</p>
@@ -649,10 +691,32 @@ export default function Receipts() {
                     </td>
                   ) : (
                     <td className="px-5 py-4 text-xs max-w-40">
-                      {r.status === "PENDING"  && <span className="text-amber-600">Awaiting review</span>}
-                      {r.status === "APPROVED" && <span className="text-blue-600">Approved — payment pending</span>}
-                      {r.status === "PAID"     && <span className="text-emerald-600 font-medium">✓ Paid out</span>}
-                      {r.status === "REJECTED" && <span className="text-rose-500">{r.admin_comment ?? "Rejected"}</span>}
+                      <div className="flex items-center gap-3">
+                        <span>
+                          {r.status === "PENDING"  && <span className="text-amber-600">Awaiting review</span>}
+                          {r.status === "APPROVED" && <span className="text-blue-600">Approved — payment pending</span>}
+                          {r.status === "PAID"     && <span className="text-emerald-600 font-medium">✓ Paid out</span>}
+                          {r.status === "REJECTED" && <span className="text-rose-500">{r.admin_comment ?? "Rejected"}</span>}
+                        </span>
+                        {r.status === "PENDING" && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setEditingReceipt(r)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                              title="Edit receipt"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(r.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                              title="Delete receipt"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -663,7 +727,15 @@ export default function Receipts() {
       </section>
 
       {/* ── Modals ───────────────────────────────────────── */}
-      {userId && <SubmitModal open={showModal} userId={userId} onClose={() => setShowModal(false)} onSaved={reload} />}
+      {userId && (
+        <SubmitModal
+          open={showModal || !!editingReceipt}
+          userId={userId}
+          editing={editingReceipt}
+          onClose={() => { setShowModal(false); setEditingReceipt(null); }}
+          onSaved={reload}
+        />
+      )}
       {rejectingId && userId && (
         <RejectModal receiptId={rejectingId} adminId={userId} onClose={() => setRejectingId(null)} onDone={reload} />
       )}

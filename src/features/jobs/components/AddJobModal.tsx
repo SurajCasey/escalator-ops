@@ -3,6 +3,7 @@ import { Check, Download, Plus, RefreshCw, Trash2, Users, X } from "lucide-react
 import { supabase } from "../../../lib/supabase";
 import type { Job, JobInput, JobStatus, JobType } from "../../../hooks/Usejobs";
 import { frequencyLabel } from "../../../hooks/Usejobs";
+import { sendJobEmails } from "../../../lib/jobEmails";
 
 type Employee = { id: string; full_name: string | null; email: string; avatar_url?: string | null };
 type Client   = { id: string; name: string; address: string | null };
@@ -261,6 +262,31 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
       ));
     }
     await Promise.all(ops);
+
+    try {
+      const recipients = employees
+        .filter((employee) => assignedEmployees.includes(employee.id) && employee.email)
+        .map((employee) => ({
+          email: employee.email,
+          name: employee.full_name ?? undefined,
+        }));
+
+      await sendJobEmails({
+        recipients,
+        type: "booked",
+        job: {
+          title: payload.title,
+          clientName: payload.client_name,
+          siteName: payload.site_name,
+          scheduledAt: payload.scheduled_at,
+          status: payload.status,
+          notes: payload.notes,
+        },
+      });
+    } catch (emailError) {
+      console.error("Failed to send job booking email", emailError);
+      alert(emailError instanceof Error ? emailError.message : "Failed to send job booking email.");
+    }
 
     setSaving(false);
     onSaved();

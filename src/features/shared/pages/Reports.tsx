@@ -114,6 +114,8 @@ export default function Reports() {
   const [saving, setSaving]             = useState(false);
   const [submitting, setSubmitting]     = useState(false);
   const [pdfBusy, setPdfBusy]           = useState(false);
+  const [busyInstId, setBusyInstId]     = useState<string | null>(null); // per-row pdf busy
+  const [forceEdit, setForceEdit]       = useState(false); // allow editing submitted forms
   const [profile, setProfile]           = useState<Profile | null>(null);
   const [jobs, setJobs]                 = useState<JobLite[]>([]);
   const [templates, setTemplates]       = useState<InspectionTemplate[]>([]);
@@ -223,9 +225,14 @@ export default function Reports() {
 
     // Pre-populate PRESTART sign-off fields from job + current user
     if (template.type === "PRESTART") {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
       Object.assign(answers, {
         site_location:   job?.site_name ?? "",
         supervisor_name: profile.full_name?.trim() || profile.email || "",
+        prepared_by:     profile.full_name?.trim() || profile.email || "",
+        document_date:   now.toISOString().slice(0, 10),                    // YYYY-MM-DD
+        start_time:      `${pad(now.getHours())}:${pad(now.getMinutes())}`, // HH:MM
       });
     }
 
@@ -237,7 +244,10 @@ export default function Reports() {
       status:           "DRAFT" as InspectionStatus,
       answers,
       metadata: {
-        title:      `${template.name}${job ? " — " + job.title : ""}`,
+        // PRESTART title is always the template name — no job suffix
+        title:      template.type === "PRESTART"
+                      ? template.name
+                      : `${template.name}${job ? " — " + job.title : ""}`,
         clientName: job?.client_name ?? "",
         siteName:   job?.site_name ?? "",
         preparedBy: profile.full_name?.trim() || profile.email || "",
@@ -298,25 +308,30 @@ export default function Reports() {
     toast.success("Inspection submitted.");
   }
 
-  async function generatePdf() {
-    if (!selected || !profile || !selectedTemplate) return;
-    setPdfBusy(true);
+  // ── Core PDF generation — works on any instance, no selected dependency ──────
+  async function generatePdfForInst(inst: InspectionInstance) {
+    if (!profile) return;
+    const tpl = templates.find((t) => t.id === inst.templateId);
+    if (!tpl) { toast.error("Template not found."); return; }
+
+    setBusyInstId(inst.id);
+    if (inst.id === selectedId) setPdfBusy(true);
 
     try {
-      // ── SWMS: pdf-lib overlay on the official template ─────────────────────
-      if (selected.templateType === "SWMS") {
-        const a = selected.answers;
+      // ── SWMS ────────────────────────────────────────────────────────────────
+      if (inst.templateType === "SWMS") {
+        const a = inst.answers;
         const workers = (Array.isArray(a.workers) ? a.workers : []) as WorkerRow[];
         const result = await generateAndSaveSwms(
           {
-            clientName:     String(a.client_name     ?? selected.meta.clientName ?? ""),
-            jobSiteAddress: String(a.job_site_address ?? selected.meta.siteName  ?? ""),
+            clientName:     String(a.client_name     ?? inst.meta.clientName ?? ""),
+            jobSiteAddress: String(a.job_site_address ?? inst.meta.siteName  ?? ""),
             contactName:    String(a.contact_name    ?? ""),
             contactTitle:   String(a.contact_title   ?? ""),
             contactPhone:   String(a.contact_phone   ?? ""),
             contactMobile:  String(a.contact_mobile  ?? ""),
             contactEmail:   String(a.contact_email   ?? ""),
-            initiatedBy:    String(a.initiated_by    ?? selected.meta.preparedBy ?? ""),
+            initiatedBy:    String(a.initiated_by    ?? inst.meta.preparedBy ?? ""),
             initiatedDate:  String(a.document_date   ?? ""),
             workLocations:  String(a.work_locations  ?? ""),
             supervisorName: String(a.supervisor_review ?? ""),
@@ -325,97 +340,123 @@ export default function Reports() {
             managementDate: String(a.document_date   ?? ""),
             workers,
           },
-          selected.jobId ?? undefined,
+          inst.jobId ?? undefined,
         );
-        await supabase.from("inspection_instances").update({ pdf_path: result.path }).eq("id", selected.id);
-        patchInstance({ pdfPath: result.path });
+        await supabase.from("inspection_instances").update({ pdf_path: result.path }).eq("id", inst.id);
+        setInstances((all) => all.map((i) => i.id === inst.id ? { ...i, pdfPath: result.path } : i));
         window.open(result.publicUrl, "_blank", "noopener,noreferrer");
         toast.success("SWMS PDF generated.");
         return;
       }
 
-      // ── PRESTART / GENERAL: build jsPDF, download immediately ─────────────
+      // ── PRESTART / GENERAL ──────────────────────────────────────────────────
       const { buildReportPdf } = await import("../../reports/lib/pdf");
       const { createDefaultFormData } = await import("../../reports/components/types");
 
-      const a  = selected.answers;
-      const fd = createDefaultFormData(selected.meta.preparedBy);
+      const a  = inst.answers;
+      const fd = createDefaultFormData(inst.meta.preparedBy);
 
-      // Map inspection answers → legacy formData shape for buildPreStartPdf
-      if (selected.templateType === "PRESTART") {
+      const yn = (v: unknown): boolean | null => {
+        if (v === true) return true;
+        if (v === false) return false;
+        return null;
+      };
+
+      if (inst.templateType === "PRESTART") {
         Object.assign(fd, {
           documentDate:               String(a.document_date   ?? ""),
           startTime:                  String(a.start_time      ?? ""),
-          preparedBy:                 selected.meta.preparedBy,
-          preStartSiteLocation:       String(a.site_location   ?? ""),
+          preparedBy:                 inst.meta.preparedBy,
+          preStartSiteLocation:       String(a.site_location   ?? inst.meta.siteName ?? ""),
           preStartWorkType:           String(a.work_type       ?? "Escalator Cleaning"),
           preStartArea:               String(a.area            ?? ""),
-          preStartEquipmentType:      String(a.equipment_type  ?? "Escalator"),
-          preStartWorkerNames:        String(a.worker_names    ?? ""),
-          preStartSupervisorName:     String(a.supervisor_name ?? selected.meta.preparedBy),
-          preStartVisualInspection:   a.visual_inspection  === true,
-          preStartPpeAppropriate:     a.ppe_appropriate    === true,
-          preStartSiteInduction:      a.site_induction     === true,
-          preStartMachineryGoodOrder: a.machinery_order    === true,
-          preStartPreMountChecks:     a.pre_mount_checks   === true,
-          preStartReverseCheck:       a.reverse_check      === true,
-          preStartConcernsDamage:     a.concerns_damage    === true,
-          preStartBarricades:         a.barricades         === true,
-          preStartAnyConcerns:        a.any_concerns       === true,
+          preStartEquipmentType:      String(a.equipment_type  ?? ""),
+          preStartEquipmentOther:     String(a.equipment_type_other ?? ""),
+          preStartWorkerNames:        String(a.worker_names    ?? inst.meta.preparedBy),
+          preStartSupervisorName:     String(a.supervisor_name ?? inst.meta.preparedBy),
+          preStartSignature:          String(a.signature       ?? ""),
+          preStartVisualInspection:   yn(a.visual_inspection),
+          preStartPpeAppropriate:     yn(a.ppe_appropriate),
+          preStartSiteInduction:      yn(a.site_induction),
+          preStartMachineryGoodOrder: yn(a.machinery_order),
+          preStartPreMountChecks:     yn(a.pre_mount_checks),
+          preStartReverseCheck:       yn(a.reverse_check),
+          preStartConcernsDamage:     yn(a.concerns_damage),
+          preStartBarricades:         yn(a.barricades),
+          preStartAnyConcerns:        String(a.any_concerns    ?? ""),
         });
       }
 
       const blob = buildReportPdf({
-        id:            selected.id,
-        userId:        selected.userId,
-        createdByName: selected.createdByName,
-        type:          selected.templateType === "PRESTART" ? "PRESTART" : "REPORT",
-        title:         selected.meta.title,
-        status:        selected.status,
-        jobId:         selected.jobId,
-        jobTitle:      jobs.find((j) => j.id === selected.jobId)?.title ?? "",
-        clientName:    selected.meta.clientName,
-        siteName:      selected.meta.siteName,
+        id:            inst.id,
+        userId:        inst.userId,
+        createdByName: inst.createdByName,
+        type:          inst.templateType === "PRESTART" ? "PRESTART" : "REPORT",
+        title:         inst.meta.title,
+        status:        inst.status,
+        jobId:         inst.jobId,
+        jobTitle:      jobs.find((j) => j.id === inst.jobId)?.title ?? "",
+        clientName:    inst.meta.clientName,
+        siteName:      inst.meta.siteName,
         pdfPath:       null,
         generatedAt:   null,
-        createdAt:     selected.createdAt,
-        updatedAt:     selected.updatedAt,
+        createdAt:     inst.createdAt,
+        updatedAt:     inst.updatedAt,
         formData:      fd,
       });
 
-      // Step 1: immediate download — never fails due to storage issues
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = `${selected.meta.title.replace(/\s+/g, "-")}.pdf`;
+      let dlName: string;
+      if (inst.templateType === "PRESTART") {
+        const site = (fd.preStartSiteLocation || inst.meta.siteName || "Site").trim().replace(/\s+/g, "-");
+        const d = new Date(((fd.documentDate as string) || inst.createdAt) + "T12:00:00");
+        const day = d.toLocaleDateString("en-AU", { weekday: "short" });
+        const dd  = String(d.getDate()).padStart(2, "0");
+        const mon = d.toLocaleDateString("en-AU", { month: "short" });
+        dlName = `Pre-start-OH&S-and-Site-Inspection_${site}-(${day}, ${dd}-${mon}).pdf`;
+      } else {
+        dlName = `${inst.meta.title.replace(/\s+/g, "-")}.pdf`;
+      }
+      link.download = dlName;
       link.click();
       URL.revokeObjectURL(blobUrl);
       toast.success("PDF downloaded.");
 
-      // Step 2: best-effort upload to Supabase Storage (for record-keeping)
-      const filePath = `${profile.id}/${selected.id}.pdf`;
+      // Best-effort upload to storage
+      const filePath = `${profile.id}/${inst.id}.pdf`;
       const { error: uploadErr } = await supabase.storage
         .from(BUCKET)
         .upload(filePath, blob, { upsert: true, contentType: "application/pdf" });
 
       if (!uploadErr) {
-        await supabase.from("inspection_instances").update({ pdf_path: filePath }).eq("id", selected.id);
-        patchInstance({ pdfPath: filePath });
+        await supabase.from("inspection_instances").update({ pdf_path: filePath }).eq("id", inst.id);
+        setInstances((all) => all.map((i) => i.id === inst.id ? { ...i, pdfPath: filePath } : i));
       }
-      // If upload fails we still got the download — just don't update pdf_path
 
     } catch (err) {
-      console.error("generatePdf error:", err);
+      console.error("generatePdfForInst error:", err);
       toast.error(`PDF failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      setBusyInstId(null);
       setPdfBusy(false);
     }
   }
 
-  async function downloadPdf(inst: InspectionInstance) {
-    if (!inst.pdfPath) { toast.error("Generate the PDF first."); return; }
+  async function generatePdf() {
+    if (!selected) return;
+    await generatePdfForInst(selected);
+  }
 
-    // SWMS PDFs are in the swms-documents bucket (public)
+  async function downloadPdf(inst: InspectionInstance) {
+    // If no PDF stored yet — generate it on the fly
+    if (!inst.pdfPath) {
+      await generatePdfForInst(inst);
+      return;
+    }
+
+    // SWMS PDFs are public URLs
     if (inst.templateType === "SWMS") {
       window.open(inst.pdfPath, "_blank", "noopener,noreferrer");
       return;
@@ -425,7 +466,20 @@ export default function Reports() {
     if (error || !data) { toast.error(error?.message ?? "Download failed."); return; }
     const url = URL.createObjectURL(data);
     const a = document.createElement("a");
-    a.href = url; a.download = `${inst.meta.title.replace(/\s+/g, "-")}.pdf`; a.click();
+    a.href = url;
+    let dlName2: string;
+    if (inst.templateType === "PRESTART") {
+      const site = (inst.meta.siteName || "Site").trim().replace(/\s+/g, "-");
+      const d = new Date(inst.createdAt);
+      const day = d.toLocaleDateString("en-AU", { weekday: "short" });
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mon = d.toLocaleDateString("en-AU", { month: "short" });
+      dlName2 = `Pre-start-OH&S-and-Site-Inspection_${site}-(${day}, ${dd}-${mon}).pdf`;
+    } else {
+      dlName2 = `${inst.meta.title.replace(/\s+/g, "-")}.pdf`;
+    }
+    a.download = dlName2;
+    a.click();
     URL.revokeObjectURL(url);
   }
 
@@ -445,7 +499,7 @@ export default function Reports() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-100 p-8">
+      <div className="min-h-screen bg-slate-50 p-8">
         <div className="animate-pulse space-y-5">
           <div className="h-10 w-64 rounded-2xl bg-slate-200" />
           <div className="h-64 rounded-3xl bg-white" />
@@ -457,11 +511,11 @@ export default function Reports() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6 xl:p-8">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 xl:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
 
         {/* ── Hero ──────────────────────────────────────────────────────────── */}
-        <section className="rounded-3xl bg-linear-to-r from-slate-950 via-slate-900 to-blue-900 p-6 text-white shadow-xl md:p-8">
+        <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 p-6 text-white shadow-xl md:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="text-sm uppercase tracking-[0.2em] text-sky-200/80">Compliance Records</p>
@@ -574,9 +628,16 @@ export default function Reports() {
                           className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                           {inst.status === "DRAFT" ? "Edit" : "View"}
                         </button>
-                        <button onClick={() => void downloadPdf(inst)} disabled={!inst.pdfPath}
-                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">
-                          <Eye className="h-3.5 w-3.5" />
+                        <button
+                          onClick={() => void downloadPdf(inst)}
+                          disabled={busyInstId === inst.id}
+                          title={inst.pdfPath ? "Download PDF" : "Generate & download PDF"}
+                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          {busyInstId === inst.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Eye className="h-3.5 w-3.5" />
+                          }
                         </button>
                         <button onClick={() => void deleteInstance(inst)}
                           className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50">
@@ -626,98 +687,124 @@ export default function Reports() {
       )}
 
       {/* ── Editor modal ───────────────────────────────────────────────────── */}
-      {editorOpen && selected && selectedTemplate && (
-        <Overlay onClose={() => setEditorOpen(false)}>
-          <section className="relative flex h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+      {editorOpen && selected && selectedTemplate && (() => {
+        const isPrestart = selected.templateType === "PRESTART";
+        const isReadOnly = selected.status !== "DRAFT" && !forceEdit;
+        return (
+          <Overlay onClose={() => { setEditorOpen(false); setForceEdit(false); }}>
+            <section className="relative flex h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
 
-            {/* Header */}
-            <div className="border-b border-slate-100 px-5 pt-5 pb-4 md:px-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                    {humanizeType(selected.templateType)} · v{selected.templateVersion}
-                  </p>
-                  <input
-                    value={selected.meta.title}
-                    onChange={(e) => patchMeta({ title: e.target.value })}
-                    disabled={selected.status !== "DRAFT"}
-                    className="mt-1 w-full border-0 p-0 text-xl font-bold text-slate-900 outline-none disabled:bg-transparent"
-                  />
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                    <MetaChip label="By" value={selected.createdByName} />
-                    <MetaChip label="Status" value={selected.status} />
-                    <MetaChip label="Updated" value={fmtDate(selected.updatedAt)} />
-                    {selected.pdfPath && <MetaChip label="PDF" value="Generated" />}
+              {/* Header */}
+              <div className="border-b border-slate-100 px-5 pt-5 pb-4 md:px-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      {humanizeType(selected.templateType)} · v{selected.templateVersion}
+                    </p>
+                    <input
+                      value={selected.meta.title}
+                      onChange={(e) => patchMeta({ title: e.target.value })}
+                      disabled={isReadOnly}
+                      className="mt-1 w-full border-0 p-0 text-xl font-bold text-slate-900 outline-none disabled:bg-transparent"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                      <MetaChip label="By" value={selected.createdByName} />
+                      <MetaChip label="Status" value={selected.status} />
+                      <MetaChip label="Updated" value={fmtDate(selected.updatedAt)} />
+                      {selected.pdfPath && <MetaChip label="PDF" value="Generated" />}
+                    </div>
+                  </div>
+                  <button onClick={() => { setEditorOpen(false); setForceEdit(false); }}
+                    className="shrink-0 rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Meta fields */}
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Client</label>
+                    <input value={selected.meta.clientName} onChange={(e) => patchMeta({ clientName: e.target.value })}
+                      disabled={isReadOnly}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-500 disabled:bg-slate-50" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Site</label>
+                    <input value={selected.meta.siteName} onChange={(e) => patchMeta({ siteName: e.target.value })}
+                      disabled={isReadOnly}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-500 disabled:bg-slate-50" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Linked Job</label>
+                    <select value={selected.jobId ?? ""} disabled={isReadOnly}
+                      onChange={(e) => {
+                        const job = jobs.find((j) => j.id === e.target.value);
+                        patchInstance({ jobId: e.target.value || null });
+                        if (job) {
+                          patchMeta({ clientName: job.client_name, siteName: job.site_name ?? "" });
+                          if (selected.templateType === "PRESTART") {
+                            patchAnswers({ site_location: job.site_name ?? "" });
+                          }
+                        }
+                      }}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 disabled:bg-slate-50">
+                      <option value="">No linked job</option>
+                      {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
+                    </select>
                   </div>
                 </div>
-                <button onClick={() => setEditorOpen(false)}
-                  className="shrink-0 rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
 
-              {/* Meta fields */}
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Client</label>
-                  <input value={selected.meta.clientName} onChange={(e) => patchMeta({ clientName: e.target.value })}
-                    disabled={selected.status !== "DRAFT"}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-500 disabled:bg-slate-50" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Site</label>
-                  <input value={selected.meta.siteName} onChange={(e) => patchMeta({ siteName: e.target.value })}
-                    disabled={selected.status !== "DRAFT"}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-500 disabled:bg-slate-50" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">Linked Job</label>
-                  <select value={selected.jobId ?? ""} disabled={selected.status !== "DRAFT"}
-                    onChange={(e) => {
-                      const job = jobs.find((j) => j.id === e.target.value);
-                      patchInstance({ jobId: e.target.value || null });
-                      if (job) {
-                        patchMeta({ clientName: job.client_name, siteName: job.site_name ?? "" });
-                        // Sync site_location answer for PRESTART
-                        if (selected.templateType === "PRESTART") {
-                          patchAnswers({ site_location: job.site_name ?? "" });
-                        }
-                      }
-                    }}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 disabled:bg-slate-50">
-                    <option value="">No linked job</option>
-                    {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
-                  </select>
+                {/* Action bar — PRESTART hides Generate/Submit/Download (moved to step 3 + table) */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {isPrestart ? (
+                    <>
+                      {!isReadOnly && (
+                        <ActionBtn onClick={() => void saveSelected()} loading={saving} icon={<FilePenLine className="h-4 w-4" />} label="Save Draft" variant="primary" />
+                      )}
+                      {isReadOnly && (
+                        <ActionBtn onClick={() => setForceEdit(true)} icon={<FilePenLine className="h-4 w-4" />} label="Edit" variant="outline" />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {(selected.status === "DRAFT" || forceEdit) && (
+                        <>
+                          <ActionBtn onClick={() => void saveSelected()} loading={saving} icon={<FilePenLine className="h-4 w-4" />} label="Save Draft" variant="primary" />
+                          <ActionBtn onClick={() => void submitSelected()} loading={submitting} icon={<SendHorizonal className="h-4 w-4" />} label="Submit" variant="success" />
+                        </>
+                      )}
+                      {isReadOnly && (
+                        <ActionBtn onClick={() => setForceEdit(true)} icon={<FilePenLine className="h-4 w-4" />} label="Edit" variant="outline" />
+                      )}
+                      <ActionBtn onClick={() => void generatePdf()} loading={pdfBusy} icon={<FileCheck2 className="h-4 w-4" />} label={selected.templateType === "SWMS" ? "Generate SWMS PDF" : "Generate PDF"} variant="outline" />
+                      {selected.pdfPath && (
+                        <ActionBtn onClick={() => void downloadPdf(selected)} icon={<Download className="h-4 w-4" />} label="Download" variant="outline" />
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Action bar */}
-              <div className="mt-4 flex flex-wrap gap-2">
-                {selected.status === "DRAFT" && (
-                  <>
-                    <ActionBtn onClick={() => void saveSelected()} loading={saving} icon={<FilePenLine className="h-4 w-4" />} label="Save Draft" variant="primary" />
-                    <ActionBtn onClick={() => void submitSelected()} loading={submitting} icon={<SendHorizonal className="h-4 w-4" />} label="Submit" variant="success" />
-                  </>
-                )}
-                <ActionBtn onClick={() => void generatePdf()} loading={pdfBusy} icon={<FileCheck2 className="h-4 w-4" />} label={selected.templateType === "SWMS" ? "Generate SWMS PDF" : "Generate PDF"} variant="outline" />
-                {selected.pdfPath && (
-                  <ActionBtn onClick={() => void downloadPdf(selected)} icon={<Download className="h-4 w-4" />} label="Download" variant="outline" />
-                )}
+              {/* Form */}
+              <div className="flex-1 overflow-y-auto p-5 md:p-6">
+                <InspectionForm
+                  schema={selectedTemplate.schema}
+                  answers={selected.answers}
+                  onChange={patchAnswers}
+                  readOnly={isReadOnly}
+                  stepMode={isPrestart}
+                  onSave={isPrestart && !isReadOnly ? () => void saveSelected() : undefined}
+                  onSubmit={isPrestart && !isReadOnly ? () => void submitSelected() : undefined}
+                  onGeneratePdf={isPrestart ? () => void generatePdf() : undefined}
+                  saving={saving}
+                  submitting={submitting}
+                  pdfBusy={pdfBusy}
+                />
               </div>
-            </div>
-
-            {/* Form */}
-            <div className="flex-1 overflow-y-auto p-5 md:p-6">
-              <InspectionForm
-                schema={selectedTemplate.schema}
-                answers={selected.answers}
-                onChange={patchAnswers}
-                readOnly={selected.status !== "DRAFT"}
-              />
-            </div>
-          </section>
-        </Overlay>
-      )}
+            </section>
+          </Overlay>
+        );
+      })()}
     </div>
   );
 }

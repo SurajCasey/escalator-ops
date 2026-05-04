@@ -28,6 +28,7 @@ type Person = {
   created_at: string;
   hourly_rate: number | null;
   avatar_url: string | null;
+  job_title: string | null;
 };
 
 type EditForm = {
@@ -35,6 +36,7 @@ type EditForm = {
   role: Role;
   status: Status;
   hourly_rate: string;
+  job_title: string;
 };
 
 /* ── helpers ── */
@@ -81,7 +83,7 @@ export default function People() {
 
     const [meRes, peopleRes] = await Promise.all([
       uid ? supabase.from("profiles").select("role").eq("id", uid).single<{ role: Role }>() : Promise.resolve({ data: null }),
-      supabase.from("profiles").select("id, full_name, email, role, status, created_at, hourly_rate, avatar_url").order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id, full_name, email, role, status, created_at, hourly_rate, avatar_url, job_title").order("created_at", { ascending: false }),
     ]);
 
     setIsAdmin((meRes as { data: { role: Role } | null }).data?.role === "ADMIN");
@@ -121,6 +123,7 @@ export default function People() {
       role:        p.role,
       status:      p.status,
       hourly_rate: p.hourly_rate != null ? String(p.hourly_rate) : "",
+      job_title:   p.job_title ?? "",
     });
   };
 
@@ -129,10 +132,11 @@ export default function People() {
     if (!editTarget) return;
     setSaving(true);
     const patch: Record<string, unknown> = {
-      full_name: editForm.full_name.trim() || null,
-      role:      editForm.role,
-      status:    editForm.status,
+      full_name:   editForm.full_name.trim() || null,
+      role:        editForm.role,
+      status:      editForm.status,
       hourly_rate: editForm.hourly_rate !== "" ? Number(editForm.hourly_rate) : 0,
+      job_title:   editForm.job_title.trim() || null,
     };
     const { error } = await supabase.from("profiles").update(patch).eq("id", editTarget.id);
     setSaving(false);
@@ -144,6 +148,7 @@ export default function People() {
       role:        patch.role as Role,
       status:      patch.status as Status,
       hourly_rate: patch.hourly_rate as number,
+      job_title:   patch.job_title as string | null,
     } : p));
     setEditTarget(null);
   };
@@ -174,7 +179,7 @@ export default function People() {
     <div className="min-h-screen bg-slate-50">
 
       {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="bg-linear-to-br from-slate-900 via-slate-800 to-indigo-950 text-white px-6 py-8 md:px-10">
+      <section className="bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white px-6 py-8 md:px-10">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
             <div>
@@ -333,6 +338,9 @@ export default function People() {
                       <span className="flex items-center gap-1 text-xs text-slate-400">
                         <Mail className="h-3 w-3" />{person.email}
                       </span>
+                      {person.job_title && (
+                        <span className="text-xs text-slate-500 font-medium">{person.job_title}</span>
+                      )}
                       <span className="text-xs text-slate-400">Joined {fmtDate(person.created_at)}</span>
                       {person.hourly_rate != null && person.hourly_rate > 0 && isAdmin && (
                         <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
@@ -416,14 +424,25 @@ export default function People() {
             {/* Modal body */}
             <div className="px-6 py-5 space-y-4">
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">Full Name</label>
-                <input
-                  value={editForm.full_name}
-                  onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
-                  placeholder="Full name"
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">Full Name</label>
+                  <input
+                    value={editForm.full_name}
+                    onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
+                    placeholder="Full name"
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">Job Title</label>
+                  <input
+                    value={editForm.job_title}
+                    onChange={(e) => setEditForm((f) => ({ ...f, job_title: e.target.value }))}
+                    placeholder="e.g. Field Technician"
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

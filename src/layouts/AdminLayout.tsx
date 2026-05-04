@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
-  Banknote, BarChart3, Building2, Calendar, ChevronDown,
-  Clock, FileText, LayoutDashboard, LogOut, Menu, Package,
+  Banknote, BarChart3, Building2, CalendarDays, ChevronDown,
+  FileText, LayoutDashboard, LogOut, Menu, Package,
   Receipt, Settings, ShoppingCart, Timer, Users, X,
 } from "lucide-react";
 import Logo from "../assets/Logo.png";
@@ -13,8 +13,7 @@ import { supabase } from "../lib/supabase";
 /* ── Nav definition ──────────────────────────────────────── */
 const PRIMARY = [
   { to: "/admin/dashboard", label: "Dashboard", Icon: LayoutDashboard },
-  { to: "/admin/schedule",  label: "Schedule",  Icon: Clock },
-  { to: "/admin/calendar",  label: "Calendar",  Icon: Calendar },
+  { to: "/admin/schedule",  label: "Schedule",  Icon: CalendarDays },
   { to: "/admin/people",    label: "People",    Icon: Users },
 ];
 
@@ -132,11 +131,11 @@ export default function AdminLayout() {
   const closeMobile = () => setMobileOpen(false);
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-50">
 
       {/* ── Top bar ─────────────────────────────────────────── */}
       <header
-        className={`fixed top-0 left-0 right-0 z-50 h-14 bg-slate-900 border-b border-slate-700/50 shadow-lg transition-transform duration-300 ${
+        className={`fixed top-0 left-0 right-0 z-40 h-14 bg-slate-900 border-b border-slate-700/50 shadow-lg transition-transform duration-300 ${
           !navVisible ? "-translate-y-full md:translate-y-0" : "translate-y-0"
         }`}
       >
@@ -162,6 +161,16 @@ export default function AdminLayout() {
           <div className="hidden md:block ml-1">
             <MoreMenu />
           </div>
+
+          {/* Hamburger — mobile only, always in header */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen((o) => !o)}
+            className="md:hidden ml-1 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
       </header>
 
@@ -169,11 +178,13 @@ export default function AdminLayout() {
       {mobileOpen && (
         <>
           <div
-            className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md md:hidden"
+            className="fixed inset-0 z-[35] bg-slate-950/70 backdrop-blur-md md:hidden"
             onClick={closeMobile}
           />
-          <div className="fixed bottom-24 inset-x-3 z-[55] rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl overflow-hidden md:hidden">
-            <div className="p-4 max-h-[70vh] overflow-y-auto">
+          <div className="fixed bottom-0 inset-x-0 z-[36] rounded-t-2xl bg-slate-900 border-t border-slate-700/60 shadow-2xl overflow-hidden md:hidden">
+            <div className="p-4 max-h-[75vh] overflow-y-auto">
+              {/* Handle bar */}
+              <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4" />
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 px-1">Navigation</p>
               <div className="grid grid-cols-4 gap-1.5">
                 {ALL_ITEMS.map(({ to, label, Icon }) => (
@@ -191,18 +202,20 @@ export default function AdminLayout() {
         </>
       )}
 
-      {/* ── FAB (mobile only) ───────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => setMobileOpen((o) => !o)}
-        className="md:hidden fixed bottom-6 right-6 z-[60] w-14 h-14 rounded-full bg-slate-900 border border-slate-700/60 shadow-2xl text-white flex items-center justify-center transition-all active:scale-95 hover:bg-slate-800"
-        aria-label={mobileOpen ? "Close menu" : "Open menu"}
-      >
-        {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-      </button>
+      {/* ── FAB — only visible when header is hidden (scrolled away) ── */}
+      {!navVisible && (
+        <button
+          type="button"
+          onClick={() => setMobileOpen((o) => !o)}
+          className="md:hidden fixed bottom-6 right-6 z-[37] w-14 h-14 rounded-full bg-slate-900 border border-slate-700/60 shadow-2xl text-white flex items-center justify-center transition-all active:scale-95 hover:bg-slate-800"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+        >
+          {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+        </button>
+      )}
 
       {/* ── Page content ─────────────────────────────────────── */}
-      <main className="pt-14 min-h-screen pb-24 md:pb-0">
+      <main className="pt-14 min-h-screen pb-8 md:pb-0">
         <Outlet />
       </main>
     </div>

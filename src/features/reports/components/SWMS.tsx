@@ -20,8 +20,21 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-500 resize-none ${props.className ?? ""}`}
+    />
+  );
+}
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{children}</label>;
+  return (
+    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+      {children}
+    </label>
+  );
 }
 
 export default function SWMS({ formData, onChange, jobId }: Props) {
@@ -34,20 +47,21 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
     try {
       const result = await generateAndSaveSwms(
         {
-          clientName:     formData.swmsClientName,
-          jobSiteAddress: formData.swmsJobSiteAddress,
-          contactName:    formData.swmsContactName,
-          contactTitle:   formData.swmsContactTitle,
-          contactPhone:   formData.swmsContactPhone,
-          contactMobile:  formData.swmsContactMobile,
-          contactEmail:   formData.swmsContactEmail,
-          initiatedBy:    formData.swmsInitiatedBy,
-          initiatedDate:  formData.documentDate,
-          workLocations:  formData.swmsWorkLocations,
-          supervisorName: formData.swmsSupervisorReview,
-          supervisorDate: formData.documentDate,
-          managementName: formData.swmsManagementReview,
-          managementDate: formData.documentDate,
+          clientName:        formData.swmsClientName,
+          jobSiteAddress:    formData.swmsJobSiteAddress,
+          contactName:       formData.swmsContactName,
+          contactTitle:      formData.swmsContactTitle,
+          contactPhone:      formData.swmsContactPhone,
+          contactMobile:     formData.swmsContactMobile,
+          contactEmail:      formData.swmsContactEmail,
+          initiatedBy:       formData.swmsInitiatedBy,
+          initiatedDate:     formData.documentDate,
+          workLocations:     formData.swmsWorkLocations,
+          supervisorName:    formData.swmsSupervisorReview,
+          supervisorDate:    formData.swmsSupervisorDate,
+          managementName:    formData.swmsManagementReview,
+          managementDate:    formData.swmsManagementDate,
+          descriptionOfWork: formData.swmsDescriptionOfWork,
           workers: workers.map((w) => ({
             name:           w.name,
             classification: w.classification,
@@ -68,8 +82,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
   }
 
   function updateWorker(index: number, patch: Partial<SwmsWorker>) {
-    const next = workers.map((w, i) => (i === index ? { ...w, ...patch } : w));
-    onChange({ swmsWorkers: next });
+    onChange({ swmsWorkers: workers.map((w, i) => (i === index ? { ...w, ...patch } : w)) });
   }
 
   function addWorker() {
@@ -96,13 +109,14 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
           <h3 className="text-sm font-semibold text-slate-800">Project and Task Identification</h3>
         </div>
 
+        {/* Client + Site */}
         <div className="grid gap-4 lg:grid-cols-2">
           <div>
             <FieldLabel>Client</FieldLabel>
             <Input
               value={formData.swmsClientName}
               onChange={(e) => onChange({ swmsClientName: e.target.value })}
-              placeholder="e.g. Dee Why Gran"
+              placeholder="e.g. Dee Why Grand"
             />
           </div>
           <div>
@@ -115,6 +129,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
           </div>
         </div>
 
+        {/* Contact details */}
         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Contact Details</p>
           <div className="grid gap-3 lg:grid-cols-3">
@@ -139,7 +154,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
               <Input
                 value={formData.swmsContactPhone}
                 onChange={(e) => onChange({ swmsContactPhone: e.target.value })}
-                placeholder="Landline"
+                placeholder="02 XXXX XXXX"
               />
             </div>
             <div>
@@ -162,7 +177,8 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        {/* SWMS meta */}
+        <div className="grid gap-4 lg:grid-cols-2">
           <div>
             <FieldLabel>SWMS Initiated By</FieldLabel>
             <Input
@@ -179,56 +195,70 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
               onChange={(e) => onChange({ documentDate: e.target.value })}
             />
           </div>
-          <div>
-            <FieldLabel>SWMS No.</FieldLabel>
-            <Input
-              value={formData.swmsNumber}
-              onChange={(e) => onChange({ swmsNumber: e.target.value })}
-              placeholder="1"
-            />
-          </div>
-          <div>
-            <FieldLabel>Rev</FieldLabel>
-            <Input
-              value={formData.swmsRev}
-              onChange={(e) => onChange({ swmsRev: e.target.value })}
-              placeholder="1"
-            />
-          </div>
-          <div>
-            <FieldLabel>Rev Date</FieldLabel>
-            <Input
-              value={formData.swmsRevDate}
-              onChange={(e) => onChange({ swmsRevDate: e.target.value })}
-              placeholder="26.11.2025"
-            />
-          </div>
-          <div className="lg:col-span-2 xl:col-span-3">
-            <FieldLabel>Work Locations / Areas</FieldLabel>
-            <Input
-              value={formData.swmsWorkLocations}
-              onChange={(e) => onChange({ swmsWorkLocations: e.target.value })}
-              placeholder="e.g. Ground Floor, Level 1 Escalator"
-            />
+        </div>
+
+        {/* Description of Work */}
+        <div>
+          <FieldLabel>Description of Work to be Undertaken</FieldLabel>
+          <Textarea
+            rows={3}
+            value={formData.swmsDescriptionOfWork}
+            onChange={(e) => onChange({ swmsDescriptionOfWork: e.target.value })}
+            placeholder="e.g. Escalator deep cleaning and tread demarcation painting at Dee Why Grand Shopping Centre…"
+          />
+        </div>
+
+        {/* Supervisor Review */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Supervisor Review</p>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="lg:col-span-1">
+              <FieldLabel>Supervisor Name</FieldLabel>
+              <Input
+                value={formData.swmsSupervisorReview}
+                onChange={(e) => onChange({ swmsSupervisorReview: e.target.value })}
+                placeholder="Supervisor full name"
+              />
+            </div>
+            <div>
+              <FieldLabel>Date</FieldLabel>
+              <Input
+                type="date"
+                value={formData.swmsSupervisorDate}
+                onChange={(e) => onChange({ swmsSupervisorDate: e.target.value })}
+              />
+            </div>
+            <div>
+              <FieldLabel>Work Locations / Areas</FieldLabel>
+              <Input
+                value={formData.swmsWorkLocations}
+                onChange={(e) => onChange({ swmsWorkLocations: e.target.value })}
+                placeholder="e.g. Esc 1 &amp; 2, Ground Floor"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <FieldLabel>Supervisor Review (name)</FieldLabel>
-            <Input
-              value={formData.swmsSupervisorReview}
-              onChange={(e) => onChange({ swmsSupervisorReview: e.target.value })}
-              placeholder="Supervisor name"
-            />
-          </div>
-          <div>
-            <FieldLabel>Management Review (name)</FieldLabel>
-            <Input
-              value={formData.swmsManagementReview}
-              onChange={(e) => onChange({ swmsManagementReview: e.target.value })}
-              placeholder="Manager name"
-            />
+        {/* Management Review */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Management Review</p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div>
+              <FieldLabel>Management Name</FieldLabel>
+              <Input
+                value={formData.swmsManagementReview}
+                onChange={(e) => onChange({ swmsManagementReview: e.target.value })}
+                placeholder="Manager full name"
+              />
+            </div>
+            <div>
+              <FieldLabel>Date</FieldLabel>
+              <Input
+                type="date"
+                value={formData.swmsManagementDate}
+                onChange={(e) => onChange({ swmsManagementDate: e.target.value })}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -238,7 +268,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="inline-flex rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-bold text-white">Part 2</span>
-            <h3 className="text-sm font-semibold text-slate-800">Worker Qualifications & SWMS Sign-Off</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Worker Qualifications &amp; SWMS Sign-Off</h3>
           </div>
           {workers.length < 10 && (
             <button
@@ -253,7 +283,8 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
         </div>
 
         <p className="text-xs text-slate-500 leading-5">
-          Your signature below indicates you have been consulted in development of the SWMS and accept and will implement the requirements of the SWMS and control measures.
+          Your signature below indicates you have been consulted in development of the SWMS
+          and accept and will implement the requirements of the SWMS and control measures.
         </p>
 
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -331,14 +362,14 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
       <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
         <div className="flex items-center gap-2">
           <FileCheck2 className="h-4 w-4 text-slate-500" />
-          <h3 className="text-sm font-semibold text-slate-800">Generate Official SWMS PDF</h3>
+          <h3 className="text-sm font-semibold text-slate-800">Download Official SWMS PDF</h3>
         </div>
 
         <p className="text-xs text-slate-500 leading-5">
-          Fills your data into the original Statewide Escalator Cleaning JSEA&SWMS template —
-          preserving the exact layout, branding, and all static content (Hazard Analysis, Risk
-          Calculator, PPE, etc). The filled PDF is saved to cloud storage and a download link
-          is provided below.
+          Fills your data into the official Statewide Escalator Cleaning JSEA&amp;SWMS template —
+          preserving the exact layout, branding, and all static content (Hazard Analysis,
+          Risk Calculator, PPE, etc). The filled PDF is saved to cloud storage and a download
+          link is provided below.
         </p>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -353,7 +384,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
             ) : (
               <FileCheck2 className="h-4 w-4" />
             )}
-            {generating ? "Generating…" : "Generate Filled PDF"}
+            {generating ? "Generating…" : "Generate &amp; Download PDF"}
           </button>
 
           {downloadUrl && (
@@ -370,9 +401,9 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
         </div>
 
         <p className="text-xs text-slate-400 leading-5">
-          <span className="font-medium">Note:</span> The PDF uses the official template — only
-          the fields you filled above are written into it. All hazard tables, controls, and
-          compliance content remain exactly as in the master document.
+          <span className="font-medium">Note:</span> Pages 4-13 (Hazard Analysis, Risk
+          Calculator, Equipment &amp; PPE checklists) are static content carried over
+          exactly from the master document.
         </p>
       </div>
 

@@ -113,23 +113,24 @@ export default function Employees() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className="flex justify-between items-start max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-50">
+      <section className="bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white px-6 py-8 md:px-10">
+        <div className="max-w-7xl mx-auto flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Employees</h1>
-            <p className="text-gray-500 text-sm mt-1">View and manage all team members.</p>
+            <p className="text-sm text-slate-400">People</p>
+            <h1 className="mt-1 text-2xl font-bold md:text-3xl">Employees</h1>
+            <p className="mt-2 text-sm text-slate-300">View and manage all team members.</p>
           </div>
           <button
             onClick={fetch}
             disabled={loading}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 bg-white text-slate-900 font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-blue-50 shadow-md transition-all disabled:opacity-60 self-start md:self-auto"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </button>
         </div>
-      </header>
+      </section>
 
       <div className="max-w-7xl mx-auto px-8 py-6 space-y-5">
         {/* Stats */}
@@ -140,35 +141,35 @@ export default function Employees() {
             { label: "Pending", value: stats.pending, color: "text-yellow-600", bg: "bg-yellow-50" },
             { label: "Admins", value: stats.admin, color: "text-purple-600", bg: "bg-purple-50" },
           ].map((s) => (
-            <div key={s.label} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
               <div className={`w-10 h-10 rounded-full ${s.bg} flex items-center justify-center`}>
                 <span className={`text-lg font-bold ${s.color}`}>{s.value}</span>
               </div>
-              <p className="text-sm text-gray-600 font-medium">{s.label}</p>
+              <p className="text-sm text-slate-600 font-medium">{s.label}</p>
             </div>
           ))}
         </div>
 
         {/* Search + Tabs */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <div className="flex gap-3 mb-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search by name or email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
-          <div className="flex gap-1 border-b border-gray-200">
+          <div className="flex gap-1 border-b border-slate-200">
             {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${tab === t.key ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${tab === t.key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
               >
                 {t.label}
               </button>
@@ -177,33 +178,33 @@ export default function Employees() {
         </div>
 
         {/* Table */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center py-20 text-gray-400 text-sm">
+            <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
               <RefreshCw className="animate-spin h-5 w-5 mr-2" /> Loading…
             </div>
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Employee</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Email</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Role</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Joined</th>
-                  {isAdmin && <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Actions</th>}
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Employee</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Email</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Role</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Status</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Joined</th>
+                  {isAdmin && <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={isAdmin ? 6 : 5} className="text-center py-16 text-gray-400 text-sm">No employees found.</td></tr>
+                  <tr><td colSpan={isAdmin ? 6 : 5} className="text-center py-16 text-slate-400 text-sm">No employees found.</td></tr>
                 ) : filtered.map((emp) => {
                   const isEditingThis = editing === emp.id;
                   const sCfg = STATUS_CONFIG[emp.status];
                   const rCfg = ROLE_CONFIG[emp.role];
 
                   return (
-                    <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarBg(emp.full_name)}`}>
@@ -213,21 +214,21 @@ export default function Employees() {
                             <input
                               value={editForm.full_name}
                               onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
-                              className="border border-gray-200 rounded px-2 py-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="border border-slate-200 rounded px-2 py-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
                               placeholder="Full name"
                             />
                           ) : (
-                            <span className="font-medium text-gray-900 text-sm">{emp.full_name ?? "—"}</span>
+                            <span className="font-medium text-slate-900 text-sm">{emp.full_name ?? "—"}</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{emp.email}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{emp.email}</td>
                       <td className="px-6 py-4">
                         {isEditingThis && isAdmin ? (
                           <select
                             value={editForm.role}
                             onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value as Role }))}
-                            className="border border-gray-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="border border-slate-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             <option value="EMPLOYEE">Employee</option>
                             <option value="ADMIN">Admin</option>
@@ -243,7 +244,7 @@ export default function Employees() {
                           <select
                             value={editForm.status}
                             onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as Status }))}
-                            className="border border-gray-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="border border-slate-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             <option value="ACTIVE">Active</option>
                             <option value="PENDING">Pending</option>
@@ -256,7 +257,7 @@ export default function Employees() {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="px-6 py-4 text-sm text-slate-600">
                         {new Date(emp.created_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
                       {isAdmin && (
@@ -271,12 +272,12 @@ export default function Employees() {
                                 >
                                   <Save className="h-3 w-3" />{saving ? "Saving…" : "Save"}
                                 </button>
-                                <button onClick={cancelEdit} className="inline-flex items-center gap-1 border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium">
+                                <button onClick={cancelEdit} className="inline-flex items-center gap-1 border border-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium">
                                   <X className="h-3 w-3" /> Cancel
                                 </button>
                               </>
                             ) : (
-                              <button onClick={() => startEdit(emp)} className="inline-flex items-center gap-1 border border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                              <button onClick={() => startEdit(emp)} className="inline-flex items-center gap-1 border border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 <Pencil className="h-3 w-3" /> Edit
                               </button>
                             )}

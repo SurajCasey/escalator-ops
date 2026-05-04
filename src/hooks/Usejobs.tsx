@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabase";
+import { sendJobEmails } from "../lib/jobEmails";
 import toast from "react-hot-toast";
 
 export type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
@@ -61,11 +62,41 @@ export function useJobs() {
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("jobs")
-      .select("*")
-      .order("scheduled_at", { ascending: true });
 
+    // Employees only see jobs assigned to them
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user.id;
+
+    let query = supabase.from("jobs").select("*").order("scheduled_at", { ascending: true });
+
+    if (uid) {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", uid)
+        .single<{ role: string }>();
+
+      if (prof?.role === "EMPLOYEE") {
+        // Jobs can be assigned via job_assignments table (new) OR assigned_to column (legacy).
+        // Fetch both sets and union them.
+        const { data: assignmentRows } = await supabase
+          .from("job_assignments")
+          .select("job_id")
+          .eq("employee_id", uid);
+
+        const assignedJobIds = (assignmentRows ?? []).map((r: { job_id: string }) => r.job_id);
+
+        if (assignedJobIds.length > 0) {
+          // Show jobs from job_assignments + any legacy assigned_to jobs
+          query = query.or(`assigned_to.eq.${uid},id.in.(${assignedJobIds.join(",")})`);
+        } else {
+          // Fall back to legacy assigned_to only
+          query = query.eq("assigned_to", uid);
+        }
+      }
+    }
+
+    const { data, error } = await query;
     if (error) {
       toast.error("Failed to load jobs: " + error.message);
     } else {
@@ -153,15 +184,74 @@ export function useJobs() {
   };
 
   const deleteJob = async (id: string): Promise<boolean> => {
+    const job = jobs.find((j) => j.id === id);
+    const { data: assignmentRows } = await supabase
+      .from("job_assignments")
+      .select("employee_id")
+      .eq("job_id", id);
+
     const { error } = await supabase.from("jobs").delete().eq("id", id);
     if (error) {
       toast.error(error.message);
       return false;
     }
+
+    if (job) {
+      try {
+        const employeeIds = (assignmentRows ?? []).map((row: { employee_id: string }) => row.employee_id);
+        let recipients: { email: string; name?: string }[] = [];
+
+        if (employeeIds.length > 0) {
+          const { data: profileRows } = await supabase
+            .from("profiles")
+            .select("email, full_name")
+            .in("id", employeeIds);
+
+          recipients = (profileRows ?? [])
+            .map((profile: { email: string; full_name: string | null }) => ({
+              email: profile.email,
+              name: profile.full_name ?? undefined,
+            }))
+            .filter((recipient) => recipient.email);
+        }
+
+        await sendJobEmails({
+          recipients,
+          type: "cancelled",
+          job: {
+            title: job.title,
+            clientName: job.client_name,
+            siteName: job.site_name,
+            scheduledAt: job.scheduled_at,
+            status: job.status,
+            notes: job.notes,
+          },
+        });
+      } catch (emailError) {
+        console.error("Failed to send cancellation email", emailError);
+        toast.error(emailError instanceof Error ? emailError.message : "Failed to send cancellation email.");
+      }
+    }
+
     toast.success("Job deleted.");
     setJobs((prev) => prev.filter((j) => j.id !== id));
     return true;
   };
 
-  return { jobs, loading, fetchJobs, createJob, updateJob, markComplete, deleteJob };
+  /** Admin: revert a completed job back to SCHEDULED so employees can resume it */
+  const undoComplete = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from("jobs")
+      .update({ status: "SCHEDULED", completed_at: null })
+      .eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return false;
+    }
+    toast.success("Job re-opened — employees can clock in again.");
+    await fetchJobs();
+    return true;
+  };
+
+  return { jobs, loading, fetchJobs, createJob, updateJob, markComplete, deleteJob, undoComplete };
 }

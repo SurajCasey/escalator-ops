@@ -279,8 +279,8 @@ export default function PurchaseRequests() {
 
   const load = useCallback(async (uid: string, admin: boolean) => {
     setLoading(true);
-    const query = supabase.from("purchase_requests").select("*").order("created_at", { ascending: false });
-    if (!admin) query.eq("requested_by", uid);
+    let query = supabase.from("purchase_requests").select("*").order("created_at", { ascending: false });
+    if (!admin) query = query.eq("requested_by", uid);
     const { data: prData, error } = await query;
     if (error) { toast.error(error.message); setLoading(false); return; }
 
@@ -301,7 +301,7 @@ export default function PurchaseRequests() {
       if (!uid) return;
       setUserId(uid);
       supabase.from("profiles").select("role").eq("id", uid).single().then(({ data: p }) => {
-        const admin = p?.role === "admin";
+        const admin = p?.role === "ADMIN";
         setIsAdmin(admin);
         load(uid, admin);
       });
@@ -333,10 +333,10 @@ export default function PurchaseRequests() {
   const reload = () => { if (userId) load(userId, isAdmin); };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6 xl:p-8 space-y-6">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 xl:p-8 space-y-6">
 
       {/* Header */}
-      <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-violet-900 text-white p-6 md:p-8 shadow-lg">
+      <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white p-6 md:p-8 shadow-lg">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm text-slate-300">{isAdmin ? "Procurement" : "My Requests"}</p>

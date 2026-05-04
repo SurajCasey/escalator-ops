@@ -116,33 +116,31 @@ export default function AdminUsers() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className="flex justify-between items-start max-w-7xl mx-auto w-full">
+    <div className="min-h-screen bg-slate-50">
+      <section className="bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white px-6 py-8 md:px-10">
+        <div className="max-w-7xl mx-auto flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-            <p className="text-gray-500 text-sm mt-1">
-              Approve, disable, and manage user access across your platform.
-            </p>
+            <p className="text-sm text-slate-400">Admin</p>
+            <h1 className="mt-1 text-2xl font-bold md:text-3xl">User Management</h1>
+            <p className="mt-2 text-sm text-slate-300">Approve, disable, and manage user access across your platform.</p>
           </div>
           <button
             onClick={fetchUsers}
             disabled={loading}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 bg-white text-slate-900 font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-blue-50 shadow-md transition-all disabled:opacity-60 self-start md:self-auto"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
-      </header>
+      </section>
 
-      <div className="max-w-7xl mx-auto px-8 py-6 space-y-5">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 space-y-5">
         {/* Search + Filters */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <div className="flex gap-3 mb-4">
             <div className="relative flex-1">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
               </svg>
               <input
@@ -150,13 +148,13 @@ export default function AdminUsers() {
                 placeholder="Search by name or email..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-32.5"
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-32.5"
             >
               <option>All Roles</option>
               <option value="ADMIN">Admin</option>
@@ -165,7 +163,7 @@ export default function AdminUsers() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 border-b border-gray-200">
+          <div className="flex gap-1 border-b border-slate-200">
             {tabs.map((t) => (
               <button
                 key={t.key}
@@ -173,7 +171,7 @@ export default function AdminUsers() {
                 className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                   tab === t.key
                     ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
                 }`}
               >
                 {t.label}
@@ -192,9 +190,9 @@ export default function AdminUsers() {
         </div>
 
         {/* Table */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center py-20 text-gray-400 text-sm">
+            <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
               <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -204,39 +202,39 @@ export default function AdminUsers() {
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">User</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Email</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Role</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Joined</th>
-                  <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Actions</th>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">User</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Email</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Role</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Status</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Joined</th>
+                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-gray-400 text-sm">
+                    <td colSpan={6} className="text-center py-16 text-slate-400 text-sm">
                       No users found.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((u) => {
                     const statusCfg = STATUS_CONFIG[u.status];
-                    const roleCfg = ROLE_CONFIG[u.role] ?? { label: u.role, cls: "bg-gray-100 text-gray-600 border-gray-200" };
+                    const roleCfg = ROLE_CONFIG[u.role] ?? { label: u.role, cls: "bg-slate-100 text-slate-600 border-slate-200" };
                     const isActing = actingId === u.id;
 
                     return (
-                      <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarColor(u.full_name)}`}>
                               {getInitials(u.full_name)}
                             </div>
-                            <span className="font-medium text-gray-900 text-sm">{u.full_name ?? "—"}</span>
+                            <span className="font-medium text-slate-900 text-sm">{u.full_name ?? "—"}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{u.email}</td>
+                        <td className="px-6 py-4 text-sm text-slate-600">{u.email}</td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${roleCfg.cls}`}>
                             {roleCfg.label}
@@ -248,7 +246,7 @@ export default function AdminUsers() {
                             {statusCfg.label}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
+                        <td className="px-6 py-4 text-sm text-slate-600">
                           {new Date(u.created_at).toLocaleDateString("en-US", {
                             month: "short", day: "2-digit", year: "numeric",
                           })}
@@ -277,7 +275,7 @@ export default function AdminUsers() {
                                 <button
                                   onClick={() => disableUser(u.id)}
                                   disabled={isActing}
-                                  className="inline-flex items-center gap-1.5 border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-60"
+                                  className="inline-flex items-center gap-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-60"
                                 >
                                   Disable
                                 </button>
@@ -287,7 +285,7 @@ export default function AdminUsers() {
                               <button
                                 onClick={() => disableUser(u.id)}
                                 disabled={isActing}
-                                className="inline-flex items-center gap-1.5 border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-60"
+                                className="inline-flex items-center gap-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-60"
                               >
                                 {isActing ? "Disabling..." : "Disable"}
                               </button>
@@ -296,7 +294,7 @@ export default function AdminUsers() {
                               <button
                                 onClick={() => approveUser(u.id)}
                                 disabled={isActing}
-                                className="inline-flex items-center gap-1.5 border border-gray-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-60"
+                                className="inline-flex items-center gap-1.5 border border-slate-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-60"
                               >
                                 {isActing ? "Enabling..." : "Re-enable"}
                               </button>
@@ -352,13 +350,13 @@ export default function AdminUsers() {
               ),
             },
           ].map((stat) => (
-            <div key={stat.label} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-4">
+            <div key={stat.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-4">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${stat.iconBg}`}>
                 {stat.icon}
               </div>
               <div>
-                <p className="text-xs text-gray-500">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value.toLocaleString()}</p>
+                <p className="text-xs text-slate-500">{stat.label}</p>
+                <p className="text-2xl font-bold text-slate-900">{stat.value.toLocaleString()}</p>
               </div>
             </div>
           ))}

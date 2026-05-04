@@ -1,22 +1,16 @@
 /**
- * swmsFillPdf.ts
+ * swmsFillPdf.ts  — v2
  *
- * Loads the Statewide SWMS/JSEA template PDF and overlays typed text at the
- * exact coordinates of every blank field.  The original visual layout is
- * preserved byte-for-byte — only new text layers are added on top.
+ * Loads the Statewide SWMS/JSEA template PDF (v2, 13 pages) and overlays
+ * typed text at the exact coordinates of every blank field.  The original
+ * visual layout, branding, and hazard-analysis content (pages 4-13) are
+ * preserved byte-for-byte — only new text streams are added.
  *
- * Library choice: pdf-lib
- * ────────────────────────
- * • Works entirely in the browser (no server round-trip).
- * • Loads an existing PDF and draws text at arbitrary coordinates.
- * • Unlike jsPDF (which generates new PDFs), pdf-lib preserves the original
- *   artwork, fonts, images, and drawing paths.
- * • The two unnamed Signature AcroForm widgets already present in the PDF are
- *   left untouched; we only add new content streams.
+ * Library: pdf-lib (browser-safe, no server round-trip).
  */
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { FIELD_ZONES, WORKER_TABLE } from "./swmsFieldMap";
+import { FIELD_ZONES, WORKER_TABLE, WHITE_OUT_ZONES } from "./swmsFieldMap";
 
 // ─── Public data shape ────────────────────────────────────────────────────────
 
@@ -24,25 +18,28 @@ export interface SwmsWorkerRow {
   name: string;
   classification: string;
   employedBy: string;
-  date: string;  // ISO date string  e.g. "2026-01-15"
+  date: string;   // ISO date string  e.g. "2026-05-01"
 }
 
 export interface SwmsFillData {
   // Page 1 – Part 1
-  clientName:       string;
-  jobSiteAddress:   string;
-  contactName:      string;
-  contactTitle:     string;
-  contactPhone:     string;
-  contactMobile:    string;
-  contactEmail:     string;
-  initiatedBy:      string;
-  initiatedDate:    string;  // ISO date
-  workLocations:    string;
-  supervisorName:   string;
-  supervisorDate:   string;  // ISO date
-  managementName:   string;
-  managementDate:   string;  // ISO date
+  clientName:        string;
+  jobSiteAddress:    string;
+  contactName:       string;
+  contactTitle:      string;
+  contactPhone:      string;
+  contactMobile:     string;
+  contactEmail:      string;
+  initiatedBy:       string;
+  initiatedDate:     string;   // ISO date
+  workLocations:     string;
+  supervisorName:    string;
+  supervisorDate:    string;   // ISO date
+  managementName:    string;
+  managementDate:    string;   // ISO date
+
+  // Page 2 – Description of work
+  descriptionOfWork: string;
 
   // Page 3 – Part 2 worker sign-off
   workers: SwmsWorkerRow[];
@@ -59,25 +56,24 @@ function fmtDate(iso: string): string {
   });
 }
 
-/** Clamp text so it never exceeds maxWidth points at the given fontSize. */
+/** Clamp text so it never overflows its maxWidth. */
 function clamp(text: string, maxWidth: number, charWidthEst = 5.4): string {
-  // Rough estimate: Helvetica at 9 pt ≈ 5.4 pt per char
   const maxChars = Math.floor(maxWidth / charWidthEst);
   return text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
 }
 
-// ─── Core service ─────────────────────────────────────────────────────────────
+// ─── Core fill service ────────────────────────────────────────────────────────
 
 /**
- * Fill the SWMS template PDF with the supplied data.
+ * Fill the SWMS v2 template PDF with the supplied data.
  *
  * @param data         - All field values to embed.
- * @param templateUrl  - URL of the template PDF (defaults to the bundled one).
+ * @param templateUrl  - URL of the template PDF (defaults to v2 template).
  * @returns            - A Blob of the filled PDF ready for download or upload.
  */
 export async function fillSwmsPdf(
   data: SwmsFillData,
-  templateUrl = "/templates/swms-template.pdf",
+  templateUrl = "/templates/swms-template-v2.pdf",
 ): Promise<Blob> {
   // 1. Fetch template bytes
   const response = await fetch(templateUrl);
@@ -86,26 +82,39 @@ export async function fillSwmsPdf(
   }
   const templateBytes = await response.arrayBuffer();
 
-  // 2. Load into pdf-lib (ignoreCrypt handles the two AcroForm sig fields)
+  // 2. Load into pdf-lib
   const pdfDoc = await PDFDocument.load(templateBytes, {
     ignoreEncryption: true,
   });
 
-  // 3. Embed the standard Helvetica font (no file embedding needed)
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const font     = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const pages = pdfDoc.getPages();
+  const pages    = pdfDoc.getPages();
 
   const BLACK = rgb(0, 0, 0);
+  const WHITE = rgb(1, 1, 1);
 
-  // ── Helper: draw a single text value at a named zone ──────────────────────
-  function drawField(key: keyof typeof FIELD_ZONES, value: string) {
+  // ── Step 1: White-out pre-printed placeholder text ─────────────────────────
+  for (const zone of WHITE_OUT_ZONES) {
+    const page = pages[zone.page];
+    if (!page) continue;
+    page.drawRectangle({
+      x:      zone.x,
+      y:      zone.y,
+      width:  zone.width,
+      height: zone.height,
+      color:  WHITE,
+    });
+  }
+
+  // ── Step 2: Draw single-value field text ────────────────────────────────────
+  function drawField(key: keyof typeof FIELD_ZONES, value: string, bold = false) {
     if (!value) return;
     const zone = FIELD_ZONES[key];
     const page = pages[zone.page];
     if (!page) return;
 
-    const fs = zone.fontSize ?? 9;
+    const fs   = zone.fontSize ?? 9;
     const maxW = zone.maxWidth ?? 200;
     const text = clamp(value, maxW, fs * 0.6);
 
@@ -113,13 +122,13 @@ export async function fillSwmsPdf(
       x: zone.x,
       y: zone.y,
       size: fs,
-      font,
+      font: bold ? fontBold : font,
       color: BLACK,
       maxWidth: maxW,
     });
   }
 
-  // ── Page 1: Project and Task Identification ────────────────────────────────
+  // Page 1 — Part 1
   drawField("clientName",       data.clientName);
   drawField("jobSiteAddress",   data.jobSiteAddress);
   drawField("contactName",      data.contactName);
@@ -129,13 +138,16 @@ export async function fillSwmsPdf(
   drawField("contactEmail",     data.contactEmail);
   drawField("initiatedBy",      data.initiatedBy);
   drawField("initiatedDate",    fmtDate(data.initiatedDate));
-  drawField("workLocations",    data.workLocations);
   drawField("supervisorName",   data.supervisorName);
   drawField("supervisorDate",   fmtDate(data.supervisorDate));
+  drawField("workLocations",    data.workLocations);
   drawField("managementName",   data.managementName);
   drawField("managementDate",   fmtDate(data.managementDate));
 
-  // ── Page 3: Worker Sign-Off Table ─────────────────────────────────────────
+  // Page 2 — Description of Work
+  drawField("descriptionOfWork", data.descriptionOfWork);
+
+  // ── Step 3: Worker sign-off table (page 3) ──────────────────────────────────
   const workerPage = pages[WORKER_TABLE.page];
   if (workerPage) {
     const { col, maxWidth, fontSize, firstRowY, rowStep } = WORKER_TABLE;
@@ -143,7 +155,12 @@ export async function fillSwmsPdf(
     data.workers.slice(0, 10).forEach((w, i) => {
       const rowY = firstRowY - i * rowStep;
 
-      const drawCell = (x: number, maxW: number, text: string, bold = false) => {
+      const drawCell = (
+        x: number,
+        maxW: number,
+        text: string,
+        bold = false,
+      ) => {
         if (!text) return;
         const f = bold ? fontBold : font;
         workerPage.drawText(clamp(text, maxW, fontSize * 0.6), {
@@ -164,11 +181,8 @@ export async function fillSwmsPdf(
     });
   }
 
-  // 4. Serialise and return as Blob
-  // useObjectStreams: false is critical — without it pdf-lib recompresses the
-  // original content streams and corrupts them (zlib errors, blank pages).
+  // 4. Serialise
   const filledBytes = await pdfDoc.save({ useObjectStreams: false });
-  // pdf-lib returns Uint8Array — convert via ArrayBuffer to satisfy strict TS
   return new Blob([filledBytes.buffer as ArrayBuffer], { type: "application/pdf" });
 }
 
@@ -179,34 +193,23 @@ export async function fillSwmsPdf(
 import { supabase } from "../../../lib/supabase";
 
 export interface UploadedSwms {
-  path: string;       // storage path  e.g. "swms-documents/uuid.pdf"
-  publicUrl: string;  // public download URL
+  path: string;
+  publicUrl: string;
 }
 
 /**
  * Upload a filled SWMS Blob to Supabase Storage.
- *
- * @param blob   - Output of fillSwmsPdf()
- * @param jobId  - Optional job UUID to embed in the filename for traceability
  */
 export async function uploadSwmsPdf(
   blob: Blob,
   jobId?: string,
 ): Promise<UploadedSwms> {
-  const filename = [
-    "swms",
-    jobId ?? "general",
-    Date.now(),
-  ].join("_") + ".pdf";
-
-  const path = `swms-documents/${filename}`;
+  const filename = ["swms", jobId ?? "general", Date.now()].join("_") + ".pdf";
+  const path     = `swms-documents/${filename}`;
 
   const { error } = await supabase.storage
     .from("swms-documents")
-    .upload(path, blob, {
-      contentType: "application/pdf",
-      upsert: false,
-    });
+    .upload(path, blob, { contentType: "application/pdf", upsert: false });
 
   if (error) throw new Error(`Storage upload failed: ${error.message}`);
 
@@ -218,23 +221,21 @@ export async function uploadSwmsPdf(
 }
 
 /**
- * Convenience: fill + upload in one call.
- * Also inserts a row into the swms_documents table.
+ * Convenience: fill + upload in one call, and record in DB.
  */
 export async function generateAndSaveSwms(
   data: SwmsFillData,
   jobId?: string,
 ): Promise<UploadedSwms> {
-  const blob    = await fillSwmsPdf(data);
-  const result  = await uploadSwmsPdf(blob, jobId);
+  const blob   = await fillSwmsPdf(data);
+  const result = await uploadSwmsPdf(blob, jobId);
 
-  // Record in database
   const { data: { user } } = await supabase.auth.getUser();
   await supabase.from("swms_documents").insert({
-    job_id:     jobId ?? null,
+    job_id:       jobId ?? null,
     storage_path: result.path,
     public_url:   result.publicUrl,
-    created_by: user?.id ?? null,
+    created_by:   user?.id ?? null,
   });
 
   return result;

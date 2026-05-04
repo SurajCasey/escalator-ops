@@ -179,8 +179,10 @@ function CreateInvoiceModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const completedJobs = jobs.filter((j) => j.status === "COMPLETED" && j.flat_rate);
+  // Show ALL completed jobs — not just those with a flat_rate
+  const completedJobs = jobs.filter((j) => j.status === "COMPLETED");
   const [selectedJobId, setSelectedJobId] = useState("");
+  const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
@@ -191,8 +193,18 @@ function CreateInvoiceModal({
 
   const selectedJob = completedJobs.find((j) => j.id === selectedJobId);
 
+  // Pre-fill amount from flat_rate when job changes
+  const handleJobSelect = (id: string) => {
+    setSelectedJobId(id);
+    const job = completedJobs.find((j) => j.id === id);
+    if (job?.flat_rate) setAmount(String(job.flat_rate));
+    else setAmount("");
+  };
+
   const handleCreate = async () => {
     if (!selectedJob) return toast.error("Select a job");
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount < 0) return toast.error("Enter a valid amount");
     setSaving(true);
 
     // Get next invoice number from DB function
@@ -205,7 +217,7 @@ function CreateInvoiceModal({
       client_id: selectedJob.client_id,
       client_name: selectedJob.client_name,
       job_title: selectedJob.title,
-      amount: selectedJob.flat_rate ?? 0,
+      amount: parsedAmount,
       status: "UNPAID",
       issued_at: new Date().toISOString(),
       due_at: dueDate ? new Date(dueDate).toISOString() : null,
@@ -234,18 +246,18 @@ function CreateInvoiceModal({
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Completed Job</label>
             <select
               value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
+              onChange={(e) => handleJobSelect(e.target.value)}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">— Select a completed job —</option>
               {completedJobs.map((j) => (
                 <option key={j.id} value={j.id}>
-                  {j.title} · {j.client_name} · {money(j.flat_rate ?? 0)}
+                  {j.title} · {j.client_name}{j.flat_rate ? ` · ${money(j.flat_rate)}` : ""}
                 </option>
               ))}
             </select>
             {completedJobs.length === 0 && (
-              <p className="mt-1 text-xs text-slate-400">No completed jobs with a flat rate found.</p>
+              <p className="mt-1 text-xs text-slate-400">No completed jobs found.</p>
             )}
           </div>
 
@@ -253,9 +265,27 @@ function CreateInvoiceModal({
             <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm space-y-1">
               <p className="font-medium text-slate-900">{selectedJob.title}</p>
               <p className="text-slate-500">{selectedJob.client_name}</p>
-              <p className="text-emerald-700 font-semibold">{money(selectedJob.flat_rate ?? 0)}</p>
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Amount (AUD) *</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            {selectedJob?.flat_rate && parseFloat(amount) !== selectedJob.flat_rate && (
+              <p className="mt-1 text-xs text-amber-600">Job flat rate is {money(selectedJob.flat_rate)} — you've changed the amount.</p>
+            )}
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Due Date</label>
@@ -285,7 +315,7 @@ function CreateInvoiceModal({
           </button>
           <button
             onClick={handleCreate}
-            disabled={saving || !selectedJobId}
+            disabled={saving || !selectedJobId || !amount || isNaN(parseFloat(amount))}
             className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? "Creating…" : "Create Invoice"}
@@ -353,7 +383,7 @@ export default function Invoices() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 xl:p-8 space-y-6">
 
       {/* Header */}
-      <section className="rounded-2xl bg-linear-to-br from-slate-900 via-slate-800 to-blue-900 p-6 md:p-8 text-white shadow-lg">
+      <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 p-6 md:p-8 text-white shadow-lg">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm text-slate-300">Finance</p>
@@ -464,7 +494,7 @@ export default function Invoices() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          {inv.status === "UNPAID" && (
+                          {(inv.status === "UNPAID" || inv.status === "OVERDUE") && (
                             <>
                               <button
                                 onClick={() => markPaid(inv.id)}
@@ -473,12 +503,14 @@ export default function Invoices() {
                               >
                                 {markingPaid === inv.id ? "…" : "Mark Paid"}
                               </button>
-                              <button
-                                onClick={() => markOverdue(inv.id)}
-                                className="text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg transition-colors"
-                              >
-                                Overdue
-                              </button>
+                              {inv.status === "UNPAID" && (
+                                <button
+                                  onClick={() => markOverdue(inv.id)}
+                                  className="text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg transition-colors"
+                                >
+                                  Overdue
+                                </button>
+                              )}
                             </>
                           )}
                           <button

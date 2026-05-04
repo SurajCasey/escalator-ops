@@ -35,25 +35,26 @@ export type ReportFormData = {
   preStartDateTime: string;           // date+time string shown on cover
 
   // Prestart Audit section
-  preStartWorkType: string;           // "What type(s) of works are you performing?"
-  preStartArea: string;               // "What area will you be working?"
-  preStartEquipmentType: string;      // "What type of equipment are you working on?"
-  preStartVisualInspection: boolean;  // "Have you completed a visual safety inspection…?"
+  preStartWorkType: string;               // "What type(s) of works are you performing?"
+  preStartArea: string;                   // "What area will you be working?"
+  preStartEquipmentType: string;          // Selected equipment option (TK Elevator | Otis | Liftronic | Other)
+  preStartEquipmentOther: string;         // Free-text when "Other" is selected
+  preStartVisualInspection: boolean | null; // Yes / No / N/A
 
   // Safety Audit section
-  preStartPpeAppropriate: boolean;    // "Do you have the appropriate PPE…?"
-  preStartSiteInduction: boolean;     // "Have you received a site induction?"
-  preStartMachineryGoodOrder: boolean;// "Have you checked if our machinery is in good working order?"
-  preStartPreMountChecks: boolean;    // "Have you completed your checks before mounting…?"
-  preStartReverseCheck: boolean;      // "Have you checked if the escalator drives in reverse…?"
-  preStartConcernsDamage: boolean;    // "Is there any concerns or damaged…?" (Yes = flagged)
-  preStartPhotos: boolean;            // "Do you have any photos on the equipment…?"
-  preStartBarricades: boolean;        // "Have you used the maintenance barricades…?"
-  preStartAnyConcerns: boolean;       // "Do you have any concerns or comments?" (Yes = flagged)
+  preStartPpeAppropriate: boolean | null;     // Yes / No / N/A
+  preStartSiteInduction: boolean | null;      // Yes / No / N/A
+  preStartMachineryGoodOrder: boolean | null; // Yes / No / N/A
+  preStartPreMountChecks: boolean | null;     // Yes / No / N/A
+  preStartReverseCheck: boolean | null;       // Yes / No / N/A
+  preStartConcernsDamage: boolean | null;     // Yes (bad/red) / No (good/green) / N/A
+  preStartBarricades: boolean | null;         // Yes / No / N/A
+  preStartAnyConcerns: string;                // Free-text comments / concerns
 
   // Sign-off
   preStartWorkerNames: string;        // "Name of workers"
   preStartSupervisorName: string;     // Supervisor name for sign-off
+  preStartSignature: string;          // Base64 data URL from signature canvas
 
   // Legacy (kept for backward compat)
   siteAccessConfirmed: boolean;
@@ -79,8 +80,11 @@ export type ReportFormData = {
   swmsNumber: string;                 // SWMS No.
   swmsRev: string;                    // Rev
   swmsRevDate: string;                // Rev Date
-  swmsSupervisorReview: string;
-  swmsManagementReview: string;
+  swmsDescriptionOfWork: string;      // Description of Work to be Undertaken
+  swmsSupervisorReview: string;       // Supervisor name
+  swmsSupervisorDate: string;         // Supervisor review date (ISO)
+  swmsManagementReview: string;       // Management name
+  swmsManagementDate: string;         // Management review date (ISO)
   swmsWorkLocations: string;
 
   // Part 2 – Worker sign-off
@@ -141,18 +145,19 @@ export function createDefaultFormData(owner: string): ReportFormData {
     preStartWorkType: "Escalator Cleaning",
     preStartArea: "",
     preStartEquipmentType: "",
-    preStartVisualInspection: false,
-    preStartPpeAppropriate: false,
-    preStartSiteInduction: false,
-    preStartMachineryGoodOrder: false,
-    preStartPreMountChecks: false,
-    preStartReverseCheck: false,
-    preStartConcernsDamage: false,
-    preStartPhotos: false,
-    preStartBarricades: false,
-    preStartAnyConcerns: false,
+    preStartEquipmentOther: "",
+    preStartVisualInspection: null,
+    preStartPpeAppropriate: null,
+    preStartSiteInduction: null,
+    preStartMachineryGoodOrder: null,
+    preStartPreMountChecks: null,
+    preStartReverseCheck: null,
+    preStartConcernsDamage: null,
+    preStartBarricades: null,
+    preStartAnyConcerns: "",
     preStartWorkerNames: owner,
     preStartSupervisorName: owner,
+    preStartSignature: "",
 
     // Legacy
     siteAccessConfirmed: false,
@@ -177,8 +182,11 @@ export function createDefaultFormData(owner: string): ReportFormData {
     swmsNumber: "1",
     swmsRev: "1",
     swmsRevDate: "26.11.2025",
+    swmsDescriptionOfWork: "",
     swmsSupervisorReview: "",
+    swmsSupervisorDate: today,
     swmsManagementReview: "",
+    swmsManagementDate: today,
     swmsWorkLocations: "",
     swmsWorkers: [
       { name: owner, classification: "Operator", employedBy: "SEC", date: today },
