@@ -198,18 +198,18 @@ export default function People() {
           </div>
 
           {/* Stat pills */}
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 grid grid-cols-5 gap-2">
             {[
-              { icon: <Users className="h-4 w-4" />,       label: "Total",     value: stats.total,     color: "bg-white/10" },
-              { icon: <UserCheck className="h-4 w-4" />,   label: "Active",    value: stats.active,    color: "bg-emerald-500/20 border border-emerald-400/30" },
-              { icon: <RefreshCw className="h-4 w-4" />,   label: "Pending",   value: stats.pending,   color: stats.pending > 0 ? "bg-amber-500/20 border border-amber-400/30" : "bg-white/10" },
-              { icon: <Shield className="h-4 w-4" />,      label: "Admins",    value: stats.admins,    color: "bg-violet-500/20 border border-violet-400/30" },
-              { icon: <Users className="h-4 w-4" />,       label: "Employees", value: stats.employees, color: "bg-blue-500/20 border border-blue-400/30" },
+              { icon: <Users className="h-3.5 w-3.5 md:h-4 md:w-4" />,     label: "Total",     value: stats.total,     color: "bg-white/10" },
+              { icon: <UserCheck className="h-3.5 w-3.5 md:h-4 md:w-4" />, label: "Active",    value: stats.active,    color: "bg-emerald-500/20 border border-emerald-400/30" },
+              { icon: <RefreshCw className="h-3.5 w-3.5 md:h-4 md:w-4" />, label: "Pending",   value: stats.pending,   color: stats.pending > 0 ? "bg-amber-500/20 border border-amber-400/30" : "bg-white/10" },
+              { icon: <Shield className="h-3.5 w-3.5 md:h-4 md:w-4" />,    label: "Admins",    value: stats.admins,    color: "bg-violet-500/20 border border-violet-400/30" },
+              { icon: <Users className="h-3.5 w-3.5 md:h-4 md:w-4" />,     label: "Employees", value: stats.employees, color: "bg-blue-500/20 border border-blue-400/30" },
             ].map((s) => (
-              <div key={s.label} className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm ${s.color}`}>
-                {s.icon}
-                <span className="text-slate-300">{s.label}</span>
-                <span className="font-bold text-white">{s.value}</span>
+              <div key={s.label} className={`flex flex-col items-center text-center rounded-xl px-2 py-2 md:flex-row md:gap-2 md:px-4 md:text-left ${s.color}`}>
+                <span className="text-slate-200 mb-0.5 md:mb-0">{s.icon}</span>
+                <span className="text-[10px] md:text-sm text-slate-300 leading-tight">{s.label}</span>
+                <span className="text-sm md:text-sm font-bold text-white">{s.value}</span>
               </div>
             ))}
           </div>
@@ -220,13 +220,13 @@ export default function People() {
 
         {/* ── Filters ────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-row gap-2">
             {/* Search */}
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by name or email…"
+                placeholder="Search name or email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
@@ -236,7 +236,7 @@ export default function People() {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value as "ALL" | Role)}
-              className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-36"
+              className="border border-slate-200 rounded-xl px-2 py-2.5 text-sm text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
             >
               <option value="ALL">All Roles</option>
               <option value="ADMIN">Admin</option>

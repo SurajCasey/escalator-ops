@@ -179,10 +179,10 @@ export default function Clients() {
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Client</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Contact</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Address</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Status</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Created</th>
+                    <th className="hidden md:table-cell text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Contact</th>
+                    <th className="hidden md:table-cell text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Address</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="hidden md:table-cell text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Created</th>
                     <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Actions</th>
                   </tr>
                 </thead>
@@ -212,19 +212,23 @@ export default function Clients() {
                                 {client.company_type && (
                                   <p className="text-xs text-slate-400">{client.company_type}</p>
                                 )}
+                                {/* Contact inline on mobile */}
+                                {client.email && (
+                                  <p className="md:hidden text-xs text-slate-400 mt-0.5 truncate max-w-[160px]">{client.email}</p>
+                                )}
                               </div>
                             </div>
                           </td>
 
-                          {/* Contact */}
-                          <td className="px-6 py-4">
+                          {/* Contact — desktop only */}
+                          <td className="hidden md:table-cell px-6 py-4">
                             <p className="text-sm text-slate-700">{client.contact_person ?? "—"}</p>
                             <p className="text-xs text-slate-400 mt-0.5">{client.email ?? ""}</p>
                             <p className="text-xs text-slate-400">{client.phone ?? ""}</p>
                           </td>
 
-                          {/* Address */}
-                          <td className="px-6 py-4">
+                          {/* Address — desktop only */}
+                          <td className="hidden md:table-cell px-6 py-4">
                             {fullAddress ? (
                               <>
                                 {client.unit && (

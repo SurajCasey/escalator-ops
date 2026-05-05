@@ -139,7 +139,7 @@ export default function Schedule() {
   const { isAdmin } = useRole();
 
   // View state
-  const [view, setView] = useState<ViewMode>("calendar");
+  const [view, setView] = useState<ViewMode>("list");
 
   // Calendar state
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -228,32 +228,34 @@ export default function Schedule() {
               {isAdmin ? "Manage and track all escalator jobs." : "Your assigned jobs and upcoming shifts."}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-4 gap-2">
             {view === "calendar" ? (
               <>
                 {[
-                  { icon: <CalendarDays className="h-4 w-4" />, label: "Month Jobs", value: monthStats.total },
-                  { icon: <Clock3 className="h-4 w-4" />,       label: "Live Jobs",  value: monthStats.active },
-                  { icon: <MapPin className="h-4 w-4" />,        label: "Sites",      value: monthStats.sites },
-                  { icon: <Users className="h-4 w-4" />,         label: "Crews",      value: monthStats.crews },
+                  { icon: <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" />, label: "Month Jobs", value: monthStats.total },
+                  { icon: <Clock3 className="h-3.5 w-3.5 md:h-4 md:w-4" />,       label: "Live Jobs",  value: monthStats.active },
+                  { icon: <MapPin className="h-3.5 w-3.5 md:h-4 md:w-4" />,        label: "Sites",      value: monthStats.sites },
+                  { icon: <Users className="h-3.5 w-3.5 md:h-4 md:w-4" />,         label: "Crews",      value: monthStats.crews },
                 ].map((s) => (
-                  <div key={s.label} className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                    <div className="flex items-center gap-2 text-slate-200">{s.icon}<span className="text-xs uppercase tracking-wide">{s.label}</span></div>
-                    <p className="mt-2 text-2xl font-bold">{s.value}</p>
+                  <div key={s.label} className="rounded-xl border border-white/15 bg-white/10 px-2 py-2 md:px-4 md:py-3 backdrop-blur-sm text-center">
+                    <div className="flex items-center justify-center gap-1 text-slate-200">{s.icon}<span className="text-[10px] md:text-xs uppercase tracking-wide hidden sm:inline">{s.label}</span></div>
+                    <p className="text-[10px] md:hidden text-slate-300 mt-0.5 truncate">{s.label}</p>
+                    <p className="mt-1 text-lg md:text-2xl font-bold">{s.value}</p>
                   </div>
                 ))}
               </>
             ) : (
               <>
                 {[
-                  { icon: <CalendarDays className="h-4 w-4" />, label: "Scheduled", value: listStats.scheduled },
-                  { icon: <Clock3 className="h-4 w-4" />,       label: "Live Jobs", value: listStats.active },
-                  { icon: <Filter className="h-4 w-4" />,        label: "Upcoming",  value: listStats.upcoming },
-                  { icon: <Users className="h-4 w-4" />,         label: "Crews",     value: listStats.crews },
+                  { icon: <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" />, label: "Scheduled", value: listStats.scheduled },
+                  { icon: <Clock3 className="h-3.5 w-3.5 md:h-4 md:w-4" />,       label: "Live Jobs",  value: listStats.active },
+                  { icon: <Filter className="h-3.5 w-3.5 md:h-4 md:w-4" />,        label: "Upcoming",   value: listStats.upcoming },
+                  { icon: <Users className="h-3.5 w-3.5 md:h-4 md:w-4" />,         label: "Crews",      value: listStats.crews },
                 ].map((s) => (
-                  <div key={s.label} className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                    <div className="flex items-center gap-2 text-slate-200">{s.icon}<span className="text-xs uppercase tracking-wide">{s.label}</span></div>
-                    <p className="mt-2 text-2xl font-bold">{s.value}</p>
+                  <div key={s.label} className="rounded-xl border border-white/15 bg-white/10 px-2 py-2 md:px-4 md:py-3 backdrop-blur-sm text-center">
+                    <div className="flex items-center justify-center gap-1 text-slate-200">{s.icon}<span className="text-[10px] md:text-xs uppercase tracking-wide hidden sm:inline">{s.label}</span></div>
+                    <p className="text-[10px] md:hidden text-slate-300 mt-0.5 truncate">{s.label}</p>
+                    <p className="mt-1 text-lg md:text-2xl font-bold">{s.value}</p>
                   </div>
                 ))}
               </>
@@ -349,20 +351,34 @@ export default function Schedule() {
                   <button
                     key={day.key}
                     onClick={() => setSelectedDateKey(day.key)}
-                    className={`min-h-28 border-b border-r border-slate-100 p-3 text-left transition
+                    className={`min-h-[3rem] md:min-h-28 border-b border-r border-slate-100 p-1.5 md:p-3 text-left transition
                       ${day.isCurrentMonth ? "bg-white hover:bg-slate-50" : "bg-slate-50/70 text-slate-400 hover:bg-slate-100"}
                       ${isSelected ? "ring-2 ring-inset ring-teal-500" : ""}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold
+                      <span className={`flex h-6 w-6 md:h-7 md:w-7 items-center justify-center rounded-full text-xs md:text-sm font-semibold
                         ${isToday ? "bg-teal-600 text-white" : "text-slate-700"}`}>
                         {day.date.getDate()}
                       </span>
                       {day.jobs.length > 0 && (
-                        <span className="text-xs font-medium text-slate-500">{day.jobs.length}</span>
+                        <span className="hidden md:inline text-xs font-medium text-slate-500">{day.jobs.length}</span>
                       )}
                     </div>
-                    <div className="mt-2 space-y-1">
+                    {/* Mobile: colored dots only */}
+                    {day.jobs.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-0.5 md:hidden">
+                        {day.jobs.slice(0, 4).map((j) => (
+                          <span key={j.id} className={`h-2 w-2 rounded-full ${
+                            j.status === "SCHEDULED" ? "bg-blue-500" :
+                            j.status === "IN_PROGRESS" ? "bg-amber-500" :
+                            j.status === "COMPLETED" ? "bg-emerald-500" : "bg-rose-500"
+                          }`} />
+                        ))}
+                        {day.jobs.length > 4 && <span className="text-[9px] text-slate-400">+{day.jobs.length - 4}</span>}
+                      </div>
+                    )}
+                    {/* Desktop: text labels */}
+                    <div className="mt-2 space-y-1 hidden md:block">
                       {day.jobs.slice(0, 2).map((j) => (
                         <div key={j.id} className={`truncate rounded px-1.5 py-0.5 text-xs font-medium flex items-center gap-1 ${CAL_STATUS_STYLES[j.status]}`}>
                           {j.job_type === "CONTRACT" && <RefreshCw className="h-2.5 w-2.5 shrink-0 opacity-70" />}
@@ -444,14 +460,14 @@ export default function Schedule() {
       {view === "list" && (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-5 py-4">
-            <div className="flex flex-col gap-3 md:flex-row flex-wrap md:items-center">
+            <div className="flex flex-row gap-2 flex-wrap items-center">
               <label className="relative flex-1 min-w-0">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search jobs, clients, crew…"
-                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-teal-500 md:w-64"
+                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-teal-500"
                 />
               </label>
               <select

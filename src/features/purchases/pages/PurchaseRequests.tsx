@@ -379,11 +379,11 @@ export default function PurchaseRequests() {
               <h2 className="font-semibold text-slate-900">{isAdmin ? "All Requests" : "My Requests"}</h2>
               <p className="text-sm text-slate-500">{requests.length} total</p>
             </div>
-            <div className="flex flex-col gap-3 md:flex-row flex-wrap">
-              <label className="relative">
+            <div className="flex flex-row gap-2 flex-wrap">
+              <label className="relative flex-1 min-w-0">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items…"
-                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 md:w-52" />
+                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500" />
               </label>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
@@ -409,9 +409,13 @@ export default function PurchaseRequests() {
           <table className="min-w-full">
             <thead className="bg-slate-50">
               <tr className="border-b border-slate-200">
-                {[isAdmin ? "Employee" : null, "Item", "Quantity", "Urgency", "Status", "Date", isAdmin ? "Actions" : "Comment"].filter(Boolean).map((h) => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
-                ))}
+                {isAdmin && <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Employee</th>}
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Item</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Quantity</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Urgency</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{isAdmin ? "Actions" : "Comment"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -430,17 +434,23 @@ export default function PurchaseRequests() {
                     <p className="text-sm font-medium text-slate-900">{r.item_name}</p>
                     {r.inventory_item_id && <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Package className="h-3 w-3" />Linked to inventory</p>}
                     {r.notes && <p className="text-xs text-slate-400 mt-0.5 truncate max-w-48">{r.notes}</p>}
+                    {/* Qty + urgency shown inline on mobile */}
+                    <div className="md:hidden flex items-center gap-2 mt-1">
+                      <span className="text-xs text-slate-500">{r.quantity} {r.unit}</span>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${URGENCY_STYLES[r.urgency]}`}>{r.urgency}</span>
+                    </div>
                   </td>
-                  <td className="px-5 py-4 text-sm text-slate-700">{r.quantity} {r.unit}</td>
-                  <td className="px-5 py-4">
+                  <td className="hidden md:table-cell px-5 py-4 text-sm text-slate-700">{r.quantity} {r.unit}</td>
+                  <td className="hidden md:table-cell px-5 py-4">
                     <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${URGENCY_STYLES[r.urgency]}`}>{r.urgency}</span>
                   </td>
                   <td className="px-5 py-4">
                     <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[r.status]}`}>
                       {r.status.charAt(0) + r.status.slice(1).toLowerCase()}
                     </span>
+                    <p className="md:hidden text-xs text-slate-400 mt-0.5">{fmtDate(r.created_at)}</p>
                   </td>
-                  <td className="px-5 py-4 text-sm text-slate-600">{fmtDate(r.created_at)}</td>
+                  <td className="hidden md:table-cell px-5 py-4 text-sm text-slate-600">{fmtDate(r.created_at)}</td>
                   {isAdmin ? (
                     <td className="px-5 py-4">
                       {r.status === "PENDING" || r.status === "ORDERED" ? (

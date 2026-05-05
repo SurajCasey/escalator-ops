@@ -415,7 +415,7 @@ export default function Invoices() {
       </section>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
@@ -460,13 +460,13 @@ export default function Invoices() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-160">
+            <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-5 py-3 text-left">Invoice #</th>
                   <th className="px-5 py-3 text-left">Client / Job</th>
-                  <th className="px-5 py-3 text-left">Issued</th>
-                  <th className="px-5 py-3 text-left">Due</th>
+                  <th className="hidden md:table-cell px-5 py-3 text-left">Issued</th>
+                  <th className="hidden md:table-cell px-5 py-3 text-left">Due</th>
                   <th className="px-5 py-3 text-right">Amount</th>
                   <th className="px-5 py-3 text-left">Status</th>
                   <th className="px-5 py-3 text-right">Actions</th>
@@ -483,9 +483,11 @@ export default function Invoices() {
                       <td className="px-5 py-4">
                         <p className="text-sm font-medium text-slate-900 truncate max-w-45">{inv.client_name}</p>
                         <p className="text-xs text-slate-400 truncate max-w-45">{inv.job_title}</p>
+                        {/* Dates inline on mobile */}
+                        <p className="md:hidden text-xs text-slate-400 mt-0.5">{fmt(inv.issued_at)}{inv.due_at ? ` → ${fmt(inv.due_at)}` : ""}</p>
                       </td>
-                      <td className="px-5 py-4 text-sm text-slate-600">{fmt(inv.issued_at)}</td>
-                      <td className="px-5 py-4 text-sm text-slate-600">{inv.due_at ? fmt(inv.due_at) : "—"}</td>
+                      <td className="hidden md:table-cell px-5 py-4 text-sm text-slate-600">{fmt(inv.issued_at)}</td>
+                      <td className="hidden md:table-cell px-5 py-4 text-sm text-slate-600">{inv.due_at ? fmt(inv.due_at) : "—"}</td>
                       <td className="px-5 py-4 text-right text-sm font-semibold text-slate-900">{money(inv.amount)}</td>
                       <td className="px-5 py-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.badge}`}>

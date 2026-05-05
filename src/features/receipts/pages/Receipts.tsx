@@ -551,13 +551,13 @@ export default function Receipts() {
               </h2>
               <p className="text-sm text-slate-500">{filtered.length} of {receipts.length} total</p>
             </div>
-            <div className="flex flex-col gap-3 md:flex-row flex-wrap">
+            <div className="flex flex-row gap-2 overflow-x-auto pb-0.5">
               {/* Employee filter (admin only) */}
               {isAdmin && (
                 <select
                   value={employeeFilter}
                   onChange={(e) => setEmployeeFilter(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white"
+                  className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white"
                 >
                   <option value="ALL">All Employees</option>
                   {employees.map((e) => (
@@ -565,13 +565,13 @@ export default function Receipts() {
                   ))}
                 </select>
               )}
-              <label className="relative">
+              <label className="relative shrink-0 w-36">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
-                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 md:w-48" />
+                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500" />
               </label>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
+                className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
                 <option value="ALL">All Statuses</option>
                 <option value="PENDING">Pending</option>
                 <option value="APPROVED">Approved</option>
@@ -579,13 +579,13 @@ export default function Receipts() {
                 <option value="REJECTED">Rejected</option>
               </select>
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as typeof categoryFilter)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
+                className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
                 <option value="ALL">All Categories</option>
                 {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
               {!isAdmin && (
                 <button onClick={() => setShowModal(true)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
+                  className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
                   <Plus className="h-4 w-4" /> New Receipt
                 </button>
               )}
@@ -597,13 +597,15 @@ export default function Receipts() {
           <table className="min-w-full">
             <thead className="bg-slate-50">
               <tr className="border-b border-slate-200">
-                {[
-                  isAdmin && employeeFilter === "ALL" ? "Employee" : null,
-                  "Category", "Amount", "Date", "Notes / Job", "Status",
-                  isAdmin ? "Actions" : "Status Detail",
-                ].filter(Boolean).map((h) => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
-                ))}
+                {isAdmin && employeeFilter === "ALL" && (
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Employee</th>
+                )}
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Category</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Amount</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Notes / Job</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{isAdmin ? "Actions" : "Detail"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -630,11 +632,21 @@ export default function Receipts() {
                     </span>
                   </td>
                   {/* Amount */}
-                  <td className="px-5 py-4 text-sm font-bold text-slate-900">{fmtAUD(r.amount)}</td>
-                  {/* Date */}
-                  <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">{fmtDate(r.receipt_date)}</td>
-                  {/* Notes / Job */}
-                  <td className="px-5 py-4 text-sm text-slate-600 max-w-44">
+                  <td className="px-5 py-4">
+                    <p className="text-sm font-bold text-slate-900">{fmtAUD(r.amount)}</p>
+                    {/* Date shown inline on mobile */}
+                    <p className="md:hidden text-xs text-slate-400 mt-0.5">{fmtDate(r.receipt_date)}</p>
+                    {/* Notes/job shown inline on mobile */}
+                    {(r.job_title || r.notes) && (
+                      <p className="md:hidden text-xs text-slate-400 mt-0.5 truncate max-w-[140px]">
+                        {r.job_title ?? r.notes}
+                      </p>
+                    )}
+                  </td>
+                  {/* Date — desktop only */}
+                  <td className="hidden md:table-cell px-5 py-4 text-sm text-slate-600 whitespace-nowrap">{fmtDate(r.receipt_date)}</td>
+                  {/* Notes / Job — desktop only */}
+                  <td className="hidden md:table-cell px-5 py-4 text-sm text-slate-600 max-w-44">
                     {r.job_title && <p className="text-xs text-blue-600 font-medium truncate">{r.job_title}</p>}
                     {r.notes && <p className="text-xs text-slate-400 truncate">{r.notes}</p>}
                     {!r.job_title && !r.notes && <span className="text-slate-300 italic text-xs">—</span>}

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
-import { jsPDF } from "jspdf";
 import {
-  Banknote, CheckCircle2, ChevronLeft, ChevronRight,
-  Download, Plus, RefreshCw, X,
+  Banknote, ChevronLeft, ChevronRight,
+  Download, ExternalLink, FileText, Plus, RefreshCw,
+  Upload, X,
 } from "lucide-react";
 
 /* ── Types ───────────────────────────────────────────────── */
@@ -17,18 +17,15 @@ type PaymentRecord = {
   employee_email: string;
   period_start: string;
   period_end: string;
-  hours_worked: number;
-  hourly_rate: number;
-  gross_pay: number;
-  deductions: number;
   net_pay: number;
   notes: string | null;
   status: PayStatus;
   paid_at: string | null;
+  payslip_url: string | null;
   created_at: string;
 };
 
-type Employee = { id: string; full_name: string | null; email: string; hourly_rate: number };
+type Employee = { id: string; full_name: string | null; email: string };
 
 /* ── Constants ───────────────────────────────────────────── */
 const STATUS_STYLES: Record<PayStatus, string> = {
@@ -39,147 +36,55 @@ const STATUS_STYLES: Record<PayStatus, string> = {
 
 /* ── Helpers ─────────────────────────────────────────────── */
 function fmtDate(d: string | Date) {
-  return new Date(d).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(d instanceof Date ? d : d + "T00:00:00").toLocaleDateString("en-AU", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
 }
 function fmtAUD(n: number) {
   return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(n);
 }
-function fmtMins(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${h}h ${m.toString().padStart(2, "0")}m`;
+
+/** Monday of the ISO week containing date d */
+function isoWeekStart(d: Date): Date {
+  const copy = new Date(d);
+  const day = copy.getDay(); // 0=Sun…6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
 }
-function addDays(d: Date, n: number) {
-  const r = new Date(d); r.setDate(r.getDate() + n); return r;
+/** Sunday of the ISO week */
+function isoWeekEnd(weekStart: Date): Date {
+  const d = new Date(weekStart);
+  d.setDate(d.getDate() + 6);
+  return d;
 }
-function isoDate(d: Date) { return d.toISOString().slice(0, 10); }
-/** Returns YYYY-MM-DD in LOCAL time (avoids UTC-shift issues in AU timezone) */
-function localIsoDate(d: Date) {
+function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
-/* ── PDF Generator ───────────────────────────────────────── */
-function downloadPayslip(p: PaymentRecord) {
-  const pdf = new jsPDF({ unit: "mm", format: "a4" });
-  const W = 210;
-  const M = 20;
-  const BLUE: [number, number, number] = [37, 99, 235];
-  const DARK: [number, number, number] = [30, 41, 59];
-  const MID:  [number, number, number] = [100, 116, 139];
-  const LIGHT:[number, number, number] = [241, 245, 249];
-  const WHITE:[number, number, number] = [255, 255, 255];
-  const GREEN:[number, number, number] = [34, 197, 94];
-
-  // Header band
-  pdf.setFillColor(DARK[0], DARK[1], DARK[2]);
-  pdf.rect(0, 0, W, 44, "F");
-  pdf.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(20);
-  pdf.text("PAY SLIP", M, 20);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(9);
-  pdf.setTextColor(MID[0] + 40, MID[1] + 40, MID[2] + 40);
-  pdf.text("Statewide Escalator Cleaning Pty Ltd", W - M, 12, { align: "right" });
-  pdf.text(`Issued ${fmtDate(new Date())}`, W - M, 20, { align: "right" });
-  pdf.text(`Status: ${p.status}`, W - M, 28, { align: "right" });
-
-  let y = 58;
-
-  // Employee details
-  pdf.setTextColor(DARK[0], DARK[1], DARK[2]);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(14);
-  pdf.text(p.employee_name, M, y);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(9);
-  pdf.setTextColor(MID[0], MID[1], MID[2]);
-  y += 6;
-  pdf.text(p.employee_email, M, y);
-  y += 5;
-  pdf.text(`Pay Period:  ${fmtDate(p.period_start)}  –  ${fmtDate(p.period_end)}`, M, y);
-
-  y += 16;
-
-  // Summary boxes
-  const boxes = [
-    { label: "Hours Worked", value: `${p.hours_worked.toFixed(2)}h` },
-    { label: "Hourly Rate",  value: p.hourly_rate > 0 ? fmtAUD(p.hourly_rate) + "/hr" : "Flat" },
-    { label: "Gross Pay",    value: fmtAUD(p.gross_pay) },
-    { label: "Deductions",   value: fmtAUD(p.deductions) },
-  ];
-  const bW = (W - M * 2 - 9) / 4;
-  boxes.forEach((b, i) => {
-    const bx = M + i * (bW + 3);
-    pdf.setFillColor(LIGHT[0], LIGHT[1], LIGHT[2]);
-    pdf.roundedRect(bx, y, bW, 20, 2, 2, "F");
-    pdf.setTextColor(MID[0], MID[1], MID[2]);
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(7);
-    pdf.text(b.label, bx + 3, y + 6);
-    pdf.setTextColor(DARK[0], DARK[1], DARK[2]);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(10);
-    pdf.text(b.value, bx + 3, y + 15);
-  });
-
-  y += 28;
-
-  // Net pay highlight
-  pdf.setFillColor(GREEN[0], GREEN[1], GREEN[2]);
-  pdf.roundedRect(M, y, W - M * 2, 18, 3, 3, "F");
-  pdf.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(12);
-  pdf.text("NET PAY", M + 5, y + 12);
-  pdf.setFontSize(14);
-  pdf.text(fmtAUD(p.net_pay), W - M - 5, y + 12, { align: "right" });
-
-  y += 28;
-
-  if (p.notes) {
-    pdf.setFont("helvetica", "italic");
-    pdf.setFontSize(8);
-    pdf.setTextColor(MID[0], MID[1], MID[2]);
-    pdf.text(`Note: ${p.notes}`, M, y);
-    y += 10;
-  }
-
-  // Paid stamp
-  if (p.status === "PAID" && p.paid_at) {
-    y += 4;
-    pdf.setFillColor(BLUE[0], BLUE[1], BLUE[2]);
-    pdf.roundedRect(M, y, 60, 10, 2, 2, "F");
-    pdf.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(8);
-    pdf.text(`PAID  ${fmtDate(p.paid_at)}`, M + 4, y + 7);
-    y += 16;
-  }
-
-  y += 14;
-
-  // Signature lines
-  pdf.setDrawColor(MID[0], MID[1], MID[2]);
-  pdf.setLineWidth(0.3);
-  pdf.line(M, y, M + 70, y);
-  pdf.line(M + 100, y, M + 170, y);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(7);
-  pdf.setTextColor(MID[0], MID[1], MID[2]);
-  pdf.text("Employee Signature", M, y + 5);
-  pdf.text("Employer Signature", M + 100, y + 5);
-
-  // Footer
-  pdf.setFillColor(LIGHT[0], LIGHT[1], LIGHT[2]);
-  pdf.rect(0, 284, W, 14, "F");
-  pdf.setFontSize(6.5);
-  pdf.text("Statewide Escalator Cleaning Pty Ltd  –  Confidential Payroll Document", W / 2, 291, { align: "center" });
-
-  pdf.save(`Payslip_${p.employee_name.replace(/ /g, "_")}_${p.period_start}.pdf`);
+function addWeeks(d: Date, n: number): Date {
+  const copy = new Date(d);
+  copy.setDate(copy.getDate() + n * 7);
+  return copy;
 }
 
-/* ── Create Pay Run Modal (admin) ────────────────────────── */
+/** ISO week number */
+function isoWeekNumber(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+function weekLabel(weekStart: Date): string {
+  const end = isoWeekEnd(weekStart);
+  const wn = isoWeekNumber(weekStart);
+  const startStr = weekStart.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+  const endStr   = end.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+  return `Week ${wn} · ${startStr} – ${endStr}`;
+}
+
+/* ── Create Pay Run Modal ─────────────────────────────────── */
 type CreateModalProps = {
   open: boolean;
   adminId: string;
@@ -188,172 +93,184 @@ type CreateModalProps = {
 };
 
 function CreatePayRunModal({ open, adminId, onClose, onSaved }: CreateModalProps) {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [selectedEmp, setSelectedEmp] = useState("");
-  const [periodStart, setPeriodStart] = useState(() => {
-    const d = new Date(); d.setDate(1); return isoDate(d);
-  });
-  const [periodEnd, setPeriodEnd] = useState(() => isoDate(new Date()));
-  const [hoursWorked, setHoursWorked] = useState("");
-  const [hourlyRate, setHourlyRate] = useState("");
-  const [deductions, setDeductions] = useState("0");
-  const [notes, setNotes] = useState("");
-  const [calculating, setCalculating] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [employees,    setEmployees]   = useState<Employee[]>([]);
+  const [selectedEmp,  setSelectedEmp] = useState("");
+  /* Default to current ISO week start */
+  const [weekStart,    setWeekStart]   = useState(() => isoDate(isoWeekStart(new Date())));
+  const [amount,       setAmount]      = useState("");
+  const [notes,        setNotes]       = useState("");
+  const [file,         setFile]        = useState<File | null>(null);
+  const [saving,       setSaving]      = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setSelectedEmp(""); setHoursWorked(""); setDeductions("0"); setNotes("");
-    const d = new Date(); d.setDate(1);
-    setPeriodStart(isoDate(d));
-    setPeriodEnd(isoDate(new Date()));
-    supabase.from("profiles").select("id, full_name, email, hourly_rate").eq("status", "ACTIVE").order("full_name")
-      .then(({ data }) => {
-        setEmployees((data ?? []) as Employee[]);
-      });
+    setSelectedEmp(""); setAmount(""); setNotes(""); setFile(null);
+    setWeekStart(isoDate(isoWeekStart(new Date())));
+    supabase.from("profiles").select("id, full_name, email")
+      .eq("status", "ACTIVE").eq("role", "EMPLOYEE").order("full_name")
+      .then(({ data }) => setEmployees((data ?? []) as Employee[]));
   }, [open]);
 
   if (!open) return null;
 
-  const selectedEmployee = employees.find((e) => e.id === selectedEmp);
-
-  // Auto-calculate hours from time_entries
-  const handleCalculate = async () => {
-    if (!selectedEmp || !periodStart || !periodEnd) { toast.error("Select employee and period first."); return; }
-    setCalculating(true);
-    const { data } = await supabase
-      .from("time_entries")
-      .select("duration_minutes")
-      .eq("user_id", selectedEmp)
-      .gte("clock_in", periodStart + "T00:00:00")
-      .lte("clock_in", periodEnd + "T23:59:59");
-    const totalMins = (data ?? []).reduce((s: number, e: { duration_minutes: number | null }) => s + (e.duration_minutes ?? 0), 0);
-    setHoursWorked((totalMins / 60).toFixed(2));
-    if (selectedEmployee?.hourly_rate) setHourlyRate(String(selectedEmployee.hourly_rate));
-    setCalculating(false);
-    toast.success(`Found ${fmtMins(totalMins)} of clock-in time.`);
+  /* Snap weekStart input to the Monday of whichever week the user picks */
+  const handleWeekInput = (val: string) => {
+    if (!val) return;
+    const d = new Date(val + "T00:00:00");
+    setWeekStart(isoDate(isoWeekStart(d)));
   };
-
-  const grossPay = (parseFloat(hoursWorked) || 0) * (parseFloat(hourlyRate) || 0);
-  const netPay = grossPay - (parseFloat(deductions) || 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmp) { toast.error("Select an employee."); return; }
-    const hrs = parseFloat(hoursWorked);
-    const rate = parseFloat(hourlyRate);
-    if (isNaN(hrs) || hrs < 0) { toast.error("Enter valid hours."); return; }
-    if (isNaN(rate) || rate < 0) { toast.error("Enter valid hourly rate."); return; }
 
     setSaving(true);
-    const gross = hrs * rate;
-    const ded = parseFloat(deductions) || 0;
-    const net = gross - ded;
+
+    const wStart = new Date(weekStart + "T00:00:00");
+    const wEnd   = isoWeekEnd(wStart);
+    const netPay = parseFloat(amount) || 0;
+
+    let payslipUrl: string | null = null;
+
+    /* Upload PDF if provided */
+    if (file) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${adminId}/${Date.now()}_${safeName}`;
+      const { error: upErr } = await supabase.storage.from("payslips").upload(path, file, {
+        contentType: "application/pdf",
+        upsert: false,
+      });
+      if (upErr) { toast.error("PDF upload failed: " + upErr.message); setSaving(false); return; }
+      const { data: urlData } = supabase.storage.from("payslips").getPublicUrl(path);
+      payslipUrl = urlData?.publicUrl ?? null;
+    }
 
     const { error } = await supabase.from("employee_payments").insert({
-      employee_id: selectedEmp,
-      period_start: periodStart,
-      period_end: periodEnd,
-      hours_worked: hrs,
-      hourly_rate: rate,
-      gross_pay: gross,
-      deductions: ded,
-      net_pay: net,
-      notes: notes.trim() || null,
-      status: "DRAFT",
-      created_by: adminId,
+      employee_id:  selectedEmp,
+      period_start: isoDate(wStart),
+      period_end:   isoDate(wEnd),
+      hours_worked: 0,
+      hourly_rate:  0,
+      gross_pay:    netPay,
+      deductions:   0,
+      net_pay:      netPay,
+      notes:        notes.trim() || null,
+      status:       "DRAFT",
+      created_by:   adminId,
+      payslip_url:  payslipUrl,
     });
+
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Pay run created.");
     onSaved(); onClose();
   };
 
+  const previewWeek = weekStart
+    ? weekLabel(new Date(weekStart + "T00:00:00"))
+    : "Select a date to see the week";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-950/40" onClick={onClose} />
       <div className="relative z-10 w-full max-w-lg rounded-2xl bg-white border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
+
+        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white">
-          <h2 className="text-lg font-semibold text-slate-900">Create Pay Run</h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"><X className="h-5 w-5" /></button>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Create Pay Run</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Upload the payslip PDF and record the amount</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500">
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+
+          {/* Employee */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Employee *</label>
-            <select value={selectedEmp} onChange={(e) => { setSelectedEmp(e.target.value); const emp = employees.find((em) => em.id === e.target.value); if (emp?.hourly_rate) setHourlyRate(String(emp.hourly_rate)); }}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select value={selectedEmp} onChange={(e) => setSelectedEmp(e.target.value)} required
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">Select employee…</option>
-              {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.full_name ?? emp.email}</option>)}
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>{emp.full_name ?? emp.email}</option>
+              ))}
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Period Start *</label>
-              <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Period End *</label>
-              <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-          </div>
-
-          <button type="button" onClick={handleCalculate} disabled={calculating || !selectedEmp}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-50 transition-colors">
-            <RefreshCw className={`h-4 w-4 ${calculating ? "animate-spin" : ""}`} />
-            {calculating ? "Calculating…" : "Auto-calculate hours from timesheets"}
-          </button>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Hours Worked *</label>
-              <input type="number" min="0" step="0.01" value={hoursWorked} onChange={(e) => setHoursWorked(e.target.value)}
-                placeholder="0.00" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Hourly Rate (AUD) *</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                <input type="number" min="0" step="0.01" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)}
-                  placeholder="0.00" className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-          </div>
-
-          {/* Pay preview */}
-          {(parseFloat(hoursWorked) > 0 && parseFloat(hourlyRate) > 0) && (
-            <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Gross Pay</span>
-                <span className="font-semibold text-slate-900">{fmtAUD(grossPay)}</span>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Deductions</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                  <input type="number" min="0" step="0.01" value={deductions} onChange={(e) => setDeductions(e.target.value)}
-                    className="w-full pl-6 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
-                </div>
-              </div>
-              <div className="flex justify-between text-sm pt-1 border-t border-slate-200">
-                <span className="font-semibold text-slate-700">Net Pay</span>
-                <span className="font-bold text-emerald-600 text-base">{fmtAUD(netPay)}</span>
-              </div>
-            </div>
-          )}
-
+          {/* Week picker */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Bonus, adjustment notes…"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <label className="block text-sm font-medium text-slate-700 mb-1">Pay Week *</label>
+            <input type="date" value={weekStart} onChange={(e) => handleWeekInput(e.target.value)} required
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {weekStart && (
+              <p className="text-xs text-indigo-600 font-medium mt-1.5 flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5" />
+                {previewWeek}
+              </p>
+            )}
           </div>
 
+          {/* Amount */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Net Pay Amount (AUD) <span className="text-xs font-normal text-slate-400">— optional</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+              <input type="number" min="0" step="0.01" value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+
+          {/* PDF upload */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Payslip PDF <span className="text-xs font-normal text-slate-400">— optional</span>
+            </label>
+            {file ? (
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-200 bg-emerald-50">
+                <FileText className="h-5 w-5 text-emerald-600 shrink-0" />
+                <span className="text-sm font-medium text-emerald-800 truncate flex-1">{file.name}</span>
+                <button type="button" onClick={() => setFile(null)}
+                  className="p-1 rounded-lg hover:bg-emerald-100 text-emerald-500">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors">
+                <Upload className="h-6 w-6 text-slate-400" />
+                <span className="text-sm text-slate-500">Click to upload PDF</span>
+                <span className="text-xs text-slate-400">PDF only — max 10 MB</span>
+                <input type="file" accept="application/pdf" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); }} />
+              </label>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Notes <span className="text-xs font-normal text-slate-400">— optional</span>
+            </label>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)}
+              placeholder="Bonus included, leave payout…"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          {/* Actions */}
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
-              {saving ? "Creating…" : "Create Pay Run"}
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
+              {saving ? "Saving…" : "Create Pay Run"}
             </button>
           </div>
         </form>
@@ -364,26 +281,21 @@ function CreatePayRunModal({ open, adminId, onClose, onSaved }: CreateModalProps
 
 /* ── Main Component ──────────────────────────────────────── */
 export default function Payroll() {
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [periodFilter, setPeriodFilter] = useState<Date>(new Date());
+  const [payments,    setPayments]   = useState<PaymentRecord[]>([]);
+  const [loading,     setLoading]    = useState(true);
+  const [isAdmin,     setIsAdmin]    = useState(false);
+  const [userId,      setUserId]     = useState<string | null>(null);
+  const [showCreate,  setShowCreate] = useState(false);
 
-  // Month navigation helpers
-  const monthStart = useMemo(() => {
-    const d = new Date(periodFilter); d.setDate(1); return d;
-  }, [periodFilter]);
-  const monthEnd = useMemo(() => {
-    const d = new Date(periodFilter); d.setMonth(d.getMonth() + 1); d.setDate(0); return d;
-  }, [periodFilter]);
+  /* ISO week navigation — default to current week */
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => isoWeekStart(new Date()));
+  const currentWeekEnd = isoWeekEnd(currentWeekStart);
 
   const load = useCallback(async (uid: string, admin: boolean) => {
     setLoading(true);
     const query = admin
-      ? supabase.from("employee_payments").select("*").order("created_at", { ascending: false })
-      : supabase.from("employee_payments").select("*").eq("employee_id", uid).in("status", ["ISSUED", "PAID"]).order("created_at", { ascending: false });
+      ? supabase.from("employee_payments").select("*").order("period_start", { ascending: false })
+      : supabase.from("employee_payments").select("*").eq("employee_id", uid).in("status", ["ISSUED", "PAID"]).order("period_start", { ascending: false });
 
     const { data: pData, error } = await query;
     if (error) { toast.error(error.message); setLoading(false); return; }
@@ -397,7 +309,7 @@ export default function Payroll() {
 
     setPayments((pData ?? []).map((p) => ({
       ...p,
-      employee_name: nameMap[p.employee_id]?.name ?? "Unknown",
+      employee_name:  nameMap[p.employee_id]?.name  ?? "Unknown",
       employee_email: nameMap[p.employee_id]?.email ?? "",
     })));
     setLoading(false);
@@ -416,18 +328,17 @@ export default function Payroll() {
     });
   }, [load]);
 
+  /* Filter to the current ISO week */
   const filtered = useMemo(() => {
-    // Compare as local-date strings to avoid UTC vs local-time mismatch in AU timezone.
-    // e.g. new Date("2026-05-01") parses as UTC midnight = April 30 local (AEST +10)
-    const startKey = localIsoDate(monthStart);
-    const endKey   = localIsoDate(monthEnd);
+    const startKey = isoDate(currentWeekStart);
+    const endKey   = isoDate(currentWeekEnd);
     return payments.filter((p) => p.period_start >= startKey && p.period_start <= endKey);
-  }, [payments, monthStart, monthEnd]);
+  }, [payments, currentWeekStart, currentWeekEnd]);
 
   const stats = useMemo(() => ({
-    draft:  payments.filter((p) => p.status === "DRAFT").length,
-    issued: payments.filter((p) => p.status === "ISSUED").length,
-    paid:   payments.filter((p) => p.status === "PAID").length,
+    draft:     payments.filter((p) => p.status === "DRAFT").length,
+    issued:    payments.filter((p) => p.status === "ISSUED").length,
+    paid:      payments.filter((p) => p.status === "PAID").length,
     totalPaid: payments.filter((p) => p.status === "PAID").reduce((s, p) => s + p.net_pay, 0),
   }), [payments]);
 
@@ -437,54 +348,67 @@ export default function Payroll() {
     const { error } = await supabase.from("employee_payments").update(update).eq("id", id);
     if (error) { toast.error(error.message); return; }
     toast.success(`Pay run marked as ${newStatus.toLowerCase()}.`);
-    setPayments((prev) => prev.map((p) => p.id === id ? { ...p, status: newStatus, paid_at: newStatus === "PAID" ? new Date().toISOString() : p.paid_at } : p));
+    setPayments((prev) => prev.map((p) =>
+      p.id === id ? { ...p, status: newStatus, paid_at: newStatus === "PAID" ? new Date().toISOString() : p.paid_at } : p
+    ));
+  };
+
+  const handleDownload = async (p: PaymentRecord) => {
+    if (!p.payslip_url) { toast.error("No payslip PDF attached."); return; }
+    window.open(p.payslip_url, "_blank");
   };
 
   const reload = () => { if (userId) load(userId, isAdmin); };
 
-  const monthLabel = periodFilter.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+  const isCurrentWeek = isoDate(currentWeekStart) === isoDate(isoWeekStart(new Date()));
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 xl:p-8 space-y-6">
 
-      {/* Header */}
-      <section className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white p-6 md:p-8 shadow-lg">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+      {/* ── Hero ── */}
+      <section className="relative overflow-hidden rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white shadow-xl p-6 md:p-8">
+        <div className="pointer-events-none absolute -top-16 -right-16 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-0 left-24 h-40 w-40 rounded-full bg-indigo-500/15 blur-2xl" />
+        <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
           <div>
-            <p className="text-sm text-slate-300">{isAdmin ? "Payroll Management" : "My Pay"}</p>
-            <h1 className="mt-1 text-2xl md:text-3xl font-bold flex items-center gap-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
+              {isAdmin ? "Payroll Management" : "My Pay"}
+            </p>
+            <h1 className="mt-2 text-2xl md:text-3xl font-extrabold flex items-center gap-3">
               <Banknote className="h-7 w-7" />
               {isAdmin ? "Payroll" : "My Pay History"}
             </h1>
-            <p className="mt-2 text-sm text-slate-200">
-              {isAdmin ? "Create pay runs, issue payslips, and track payments." : "View your payslips and download pay records."}
+            <p className="mt-2 text-sm text-slate-300">
+              {isAdmin
+                ? "Upload payslips, issue weekly pay runs, and track payments."
+                : "View and download your issued payslips."}
             </p>
           </div>
-          <div className="grid grid-cols-4 gap-3">
+          <div className={`grid gap-2 ${isAdmin ? "grid-cols-4" : "grid-cols-3"}`}>
             {isAdmin ? (
               <>
                 {[
-                  { label: "Draft",  value: stats.draft,  color: "text-slate-300" },
-                  { label: "Issued", value: stats.issued, color: "text-blue-300" },
-                  { label: "Paid",   value: stats.paid,   color: "text-emerald-300" },
+                  { label: "Draft",      value: stats.draft,             color: "text-slate-300" },
+                  { label: "Issued",     value: stats.issued,            color: "text-blue-300" },
+                  { label: "Paid",       value: stats.paid,              color: "text-emerald-300" },
                   { label: "Total Paid", value: fmtAUD(stats.totalPaid), color: "text-emerald-300", small: true },
                 ].map((s) => (
-                  <div key={s.label} className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                    <p className={`text-xs uppercase tracking-wide ${s.color}`}>{s.label}</p>
-                    <p className={`mt-1 font-bold text-white ${s.small ? "text-sm mt-2" : "text-2xl"}`}>{s.value}</p>
+                  <div key={s.label} className="rounded-xl border border-white/15 bg-white/10 px-2 py-2 md:px-4 md:py-3 backdrop-blur-sm text-center">
+                    <p className={`text-[10px] md:text-xs uppercase tracking-wide ${s.color}`}>{s.label}</p>
+                    <p className={`mt-1 font-bold text-white ${s.small ? "text-xs md:text-sm" : "text-lg md:text-2xl"}`}>{s.value}</p>
                   </div>
                 ))}
               </>
             ) : (
               <>
                 {[
-                  { label: "Issued",  value: stats.issued, color: "text-blue-300" },
-                  { label: "Paid",    value: stats.paid,   color: "text-emerald-300" },
-                  { label: "Total Received", value: fmtAUD(stats.totalPaid), color: "text-emerald-300", small: true },
+                  { label: "Issued",    value: stats.issued,             color: "text-blue-300" },
+                  { label: "Paid",      value: stats.paid,               color: "text-emerald-300" },
+                  { label: "Total",     value: fmtAUD(stats.totalPaid),  color: "text-emerald-300", small: true },
                 ].map((s) => (
-                  <div key={s.label} className="col-span-1 rounded-xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                    <p className={`text-xs uppercase tracking-wide ${s.color}`}>{s.label}</p>
-                    <p className={`mt-1 font-bold text-white ${s.small ? "text-sm mt-2" : "text-2xl"}`}>{s.value}</p>
+                  <div key={s.label} className="rounded-xl border border-white/15 bg-white/10 px-2 py-2 md:px-4 md:py-3 backdrop-blur-sm text-center">
+                    <p className={`text-[10px] md:text-xs uppercase tracking-wide ${s.color}`}>{s.label}</p>
+                    <p className={`mt-1 font-bold text-white ${s.small ? "text-xs md:text-sm" : "text-lg md:text-2xl"}`}>{s.value}</p>
                   </div>
                 ))}
               </>
@@ -493,15 +417,31 @@ export default function Payroll() {
         </div>
       </section>
 
-      {/* Controls */}
+      {/* ── Controls ── */}
       <div className="flex flex-wrap items-center gap-3 justify-between">
+
+        {/* Week navigator */}
         <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm">
-          <button onClick={() => setPeriodFilter((d) => addDays(new Date(d.getFullYear(), d.getMonth() - 1, 1), 0))}
-            className="p-1 rounded-lg hover:bg-slate-100 text-slate-600"><ChevronLeft className="h-4 w-4" /></button>
-          <span className="text-sm font-semibold text-slate-900 min-w-36 text-center">{monthLabel}</span>
-          <button onClick={() => setPeriodFilter((d) => addDays(new Date(d.getFullYear(), d.getMonth() + 1, 1), 0))}
-            className="p-1 rounded-lg hover:bg-slate-100 text-slate-600"><ChevronRight className="h-4 w-4" /></button>
-          <button onClick={() => setPeriodFilter(new Date())} className="text-xs text-blue-600 font-medium hover:underline ml-1">This month</button>
+          <button
+            onClick={() => setCurrentWeekStart((d) => addWeeks(d, -1))}
+            className="p-1 rounded-lg hover:bg-slate-100 text-slate-600">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-semibold text-slate-900 min-w-64 text-center">
+            {weekLabel(currentWeekStart)}
+          </span>
+          <button
+            onClick={() => setCurrentWeekStart((d) => addWeeks(d, 1))}
+            className="p-1 rounded-lg hover:bg-slate-100 text-slate-600">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          {!isCurrentWeek && (
+            <button
+              onClick={() => setCurrentWeekStart(isoWeekStart(new Date()))}
+              className="text-xs text-blue-600 font-medium hover:underline ml-1">
+              This week
+            </button>
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -518,11 +458,11 @@ export default function Payroll() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* ── Table ── */}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-4">
           <h2 className="font-semibold text-slate-900">
-            {filtered.length} pay {filtered.length === 1 ? "run" : "runs"} in {monthLabel}
+            {filtered.length} pay {filtered.length === 1 ? "run" : "runs"} — {weekLabel(currentWeekStart)}
           </h2>
         </div>
 
@@ -530,22 +470,33 @@ export default function Payroll() {
           <table className="min-w-full">
             <thead className="bg-slate-50">
               <tr className="border-b border-slate-200">
-                {[
-                  isAdmin ? "Employee" : null,
-                  "Period", "Hours", "Rate", "Gross", "Deductions", "Net Pay", "Status", "Actions",
-                ].filter(Boolean).map((h) => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
-                ))}
+                {isAdmin && (
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Employee</th>
+                )}
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Pay Week</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Amount</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Payslip</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && (
-                <tr><td colSpan={9} className="px-5 py-12 text-center text-sm text-slate-500">Loading payroll…</td></tr>
+                <tr><td colSpan={6} className="px-5 py-12 text-center text-sm text-slate-500">Loading payroll…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={9} className="px-5 py-12 text-center text-sm text-slate-500">
-                  {payments.length === 0 ? "No pay runs created yet." : `No pay runs for ${monthLabel}.`}
-                </td></tr>
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2 text-slate-400">
+                      <Banknote className="h-8 w-8 opacity-30" />
+                      <p className="text-sm">
+                        {payments.length === 0
+                          ? "No pay runs yet — create the first one."
+                          : `No pay runs for ${weekLabel(currentWeekStart)}.`}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
               )}
               {!loading && filtered.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50">
@@ -556,14 +507,32 @@ export default function Payroll() {
                     </td>
                   )}
                   <td className="px-5 py-4 text-sm text-slate-700">
-                    <p>{fmtDate(p.period_start)}</p>
-                    <p className="text-slate-400">→ {fmtDate(p.period_end)}</p>
+                    <p className="font-medium">{fmtDate(p.period_start)}</p>
+                    <p className="text-slate-400 text-xs">→ {fmtDate(p.period_end)}</p>
+                    {/* Amount shown inline on mobile only */}
+                    {p.net_pay > 0 && (
+                      <p className="md:hidden text-xs font-bold text-emerald-700 mt-0.5">{fmtAUD(p.net_pay)}</p>
+                    )}
                   </td>
-                  <td className="px-5 py-4 text-sm text-slate-700">{p.hours_worked.toFixed(1)}h</td>
-                  <td className="px-5 py-4 text-sm text-slate-700">{fmtAUD(p.hourly_rate)}/h</td>
-                  <td className="px-5 py-4 text-sm text-slate-700">{fmtAUD(p.gross_pay)}</td>
-                  <td className="px-5 py-4 text-sm text-slate-600">({fmtAUD(p.deductions)})</td>
-                  <td className="px-5 py-4 text-sm font-bold text-emerald-700">{fmtAUD(p.net_pay)}</td>
+                  <td className="hidden md:table-cell px-5 py-4">
+                    {p.net_pay > 0
+                      ? <span className="text-sm font-bold text-emerald-700">{fmtAUD(p.net_pay)}</span>
+                      : <span className="text-xs text-slate-400">—</span>
+                    }
+                    {p.notes && <p className="text-xs text-slate-400 mt-0.5 max-w-[180px] truncate">{p.notes}</p>}
+                  </td>
+                  <td className="hidden md:table-cell px-5 py-4">
+                    {p.payslip_url ? (
+                      <button
+                        onClick={() => handleDownload(p)}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-100 px-2.5 py-1.5 rounded-lg transition-colors">
+                        <Download className="h-3.5 w-3.5" /> PDF
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">No PDF</span>
+                    )}
+                  </td>
                   <td className="px-5 py-4">
                     <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[p.status]}`}>
                       {p.status.charAt(0) + p.status.slice(1).toLowerCase()}
@@ -571,26 +540,36 @@ export default function Payroll() {
                     {p.status === "PAID" && p.paid_at && (
                       <p className="text-xs text-slate-400 mt-0.5">{fmtDate(p.paid_at)}</p>
                     )}
+                    {/* PDF button shown inline on mobile only */}
+                    {p.payslip_url && (
+                      <button
+                        onClick={() => handleDownload(p)}
+                        className="md:hidden mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800">
+                        <Download className="h-3 w-3" /> PDF
+                      </button>
+                    )}
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => downloadPayslip(p)} title="Download payslip"
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
-                        <Download className="h-4 w-4" />
-                      </button>
-                      {isAdmin && p.status === "DRAFT" && (
-                        <button onClick={() => handleStatusChange(p.id, "ISSUED")} title="Issue to employee"
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
-                          <CheckCircle2 className="h-4 w-4" />
-                        </button>
-                      )}
-                      {isAdmin && p.status === "ISSUED" && (
-                        <button onClick={() => handleStatusChange(p.id, "PAID")} title="Mark paid"
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold transition-colors">
-                          <Banknote className="h-3.5 w-3.5" /> Paid
-                        </button>
-                      )}
-                    </div>
+                    {isAdmin && (
+                      <div className="flex items-center gap-1">
+                        {p.status === "DRAFT" && (
+                          <button
+                            onClick={() => handleStatusChange(p.id, "ISSUED")}
+                            title="Issue to employee"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold transition-colors">
+                            Issue
+                          </button>
+                        )}
+                        {p.status === "ISSUED" && (
+                          <button
+                            onClick={() => handleStatusChange(p.id, "PAID")}
+                            title="Mark as paid"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold transition-colors">
+                            <Banknote className="h-3.5 w-3.5" /> Paid
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -599,9 +578,14 @@ export default function Payroll() {
         </div>
       </section>
 
-      {/* Modal */}
+      {/* ── Create Modal ── */}
       {userId && isAdmin && (
-        <CreatePayRunModal open={showCreate} adminId={userId} onClose={() => setShowCreate(false)} onSaved={reload} />
+        <CreatePayRunModal
+          open={showCreate}
+          adminId={userId}
+          onClose={() => setShowCreate(false)}
+          onSaved={reload}
+        />
       )}
     </div>
   );

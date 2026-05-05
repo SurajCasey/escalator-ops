@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Download, Plus, RefreshCw, Trash2, Users, X } from "lucide-react";
+import { AlertCircle, Check, Download, Plus, RefreshCw, Trash2, Users, X } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import type { Job, JobInput, JobStatus, JobType } from "../../../hooks/Usejobs";
 import { frequencyLabel } from "../../../hooks/Usejobs";
@@ -77,6 +77,9 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
   /* multi-assign */
   const [assignedEmployees, setAssignedEmployees] = useState<string[]>([]);
 
+  /* unavailability: set of employee_ids unavailable on selected date */
+  const [unavailableIds, setUnavailableIds] = useState<Set<string>>(new Set());
+
   /* escalators */
   const [escalators, setEscalators]         = useState<EscRow[]>([]);
   const [escInput, setEscInput]             = useState("");
@@ -93,6 +96,21 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
     supabase.from("clients").select("id, name, address").eq("status", "ACTIVE").order("name")
       .then(({ data }) => setClients(data ?? []));
   }, [open]);
+
+  /* fetch unavailability when scheduled date changes */
+  useEffect(() => {
+    if (!open || !form.scheduled_at) { setUnavailableIds(new Set()); return; }
+    const dateStr = new Date(form.scheduled_at).toISOString().split("T")[0];
+    supabase
+      .from("employee_unavailability")
+      .select("employee_id")
+      .eq("status", "APPROVED")
+      .lte("start_date", dateStr)
+      .gte("end_date", dateStr)
+      .then(({ data }) => {
+        setUnavailableIds(new Set((data ?? []).map((r: { employee_id: string }) => r.employee_id)));
+      });
+  }, [open, form.scheduled_at]);
 
   /* populate form when editing */
   useEffect(() => {
@@ -433,20 +451,31 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
                 <Users className="h-4 w-4 text-slate-500" />
                 <span className="text-sm font-semibold text-slate-800">Assign Team Members</span>
               </div>
-              <span className="text-xs text-slate-500">
-                {assignedEmployees.length > 0
-                  ? `${assignedEmployees.length} selected`
-                  : "None — all crew visible to job"}
-              </span>
+              <div className="flex items-center gap-2">
+                {unavailableIds.size > 0 && form.scheduled_at && (
+                  <span className="flex items-center gap-1 text-xs text-amber-600 font-medium">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {unavailableIds.size} unavailable
+                  </span>
+                )}
+                <span className="text-xs text-slate-500">
+                  {assignedEmployees.length > 0
+                    ? `${assignedEmployees.length} selected`
+                    : "None — all crew visible to job"}
+                </span>
+              </div>
             </div>
             <div className="max-h-44 overflow-y-auto divide-y divide-slate-100">
               {employees.length === 0 ? (
                 <p className="px-4 py-3 text-sm text-slate-400">No active employees found.</p>
               ) : employees.map(emp => {
-                const selected = assignedEmployees.includes(emp.id);
+                const selected    = assignedEmployees.includes(emp.id);
+                const unavailable = unavailableIds.has(emp.id);
                 return (
                   <button key={emp.id} type="button" onClick={() => toggleEmployee(emp.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${selected ? "bg-blue-50" : "hover:bg-slate-50"}`}>
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                      selected ? "bg-blue-50" : unavailable ? "bg-amber-50/50" : "hover:bg-slate-50"
+                    }`}>
                     <div className={`h-8 w-8 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-bold shrink-0 ${emp.avatar_url ? "" : avatarBg(emp.full_name)}`}>
                       {emp.avatar_url
                         ? <img src={emp.avatar_url} className="h-full w-full object-cover" alt="" />
@@ -454,7 +483,14 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
                       }
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 truncate">{emp.full_name ?? emp.email}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-slate-900 truncate">{emp.full_name ?? emp.email}</p>
+                        {unavailable && (
+                          <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                            <AlertCircle className="h-2.5 w-2.5" /> Unavailable
+                          </span>
+                        )}
+                      </div>
                       {emp.full_name && <p className="text-xs text-slate-400 truncate">{emp.email}</p>}
                     </div>
                     <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${selected ? "border-blue-600 bg-blue-600" : "border-slate-300"}`}>

@@ -23,6 +23,7 @@ import Invoices from "./features/invoices/pages/Invoices"
 import Receipts from "./features/receipts/pages/Receipts"
 import PurchaseRequests from "./features/purchases/pages/PurchaseRequests"
 import Payroll from "./features/payroll/pages/Payroll"
+import Availability from "./features/shared/pages/Availability"
 
 // Note: Clients, ClientDetail, People, Settings remain imported because
 // they are still used in the admin routes below.
@@ -55,6 +56,7 @@ function App() {
               <Route path="/receipts" element={<Receipts/>}/>
               <Route path="/purchase-requests" element={<PurchaseRequests/>}/>
               <Route path="/payroll" element={<Payroll/>}/>
+              <Route path="/availability" element={<Availability/>}/>
               <Route path="/settings" element={<Settings/>}/>
               {/* Admin-only paths — redirect employees to dashboard */}
               <Route path="/clients" element={<Navigate to="/dashboard" replace/>}/>
@@ -79,6 +81,7 @@ function App() {
               <Route path="/admin/receipts" element={<Receipts/>}/>
               <Route path="/admin/purchase-requests" element={<PurchaseRequests/>}/>
               <Route path="/admin/payroll" element={<Payroll/>}/>
+              <Route path="/admin/availability" element={<Availability/>}/>
               <Route path="/admin/settings" element={<Settings/>}/>
             </Route>
           </Route>

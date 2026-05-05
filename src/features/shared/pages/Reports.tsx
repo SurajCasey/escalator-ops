@@ -526,11 +526,11 @@ export default function Reports() {
                 Each inspection is versioned and linked to the exact template it was created from.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Total" value={stats.total}     icon={<FilePenLine className="h-4 w-4" />} />
-              <Stat label="Pre-starts" value={stats.preStarts} icon={<ClipboardCheck className="h-4 w-4" />} />
-              <Stat label="SWMS" value={stats.swms}       icon={<ShieldCheck className="h-4 w-4" />} />
-              <Stat label="Submitted" value={stats.submitted} icon={<FileCheck2 className="h-4 w-4" />} />
+            <div className="grid grid-cols-4 gap-2">
+              <Stat label="Total" value={stats.total}     icon={<FilePenLine className="h-3.5 w-3.5 md:h-4 md:w-4" />} />
+              <Stat label="Pre-starts" value={stats.preStarts} icon={<ClipboardCheck className="h-3.5 w-3.5 md:h-4 md:w-4" />} />
+              <Stat label="SWMS" value={stats.swms}       icon={<ShieldCheck className="h-3.5 w-3.5 md:h-4 md:w-4" />} />
+              <Stat label="Submitted" value={stats.submitted} icon={<FileCheck2 className="h-3.5 w-3.5 md:h-4 md:w-4" />} />
             </div>
           </div>
         </section>
@@ -541,7 +541,7 @@ export default function Reports() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">All Inspections</h2>
-                <p className="mt-1 text-sm text-slate-500">Drafts auto-save. Submit to lock the form.</p>
+                <p className="mt-1 text-sm text-slate-500">Save manually before submitting. Submit to lock the form.</p>
               </div>
               <button
                 onClick={() => setPickerOpen(true)}
@@ -551,7 +551,7 @@ export default function Reports() {
               </button>
             </div>
 
-            <div className="mt-4 flex flex-col gap-3 md:flex-row">
+            <div className="mt-4 flex flex-row gap-2 flex-wrap">
               <div className="relative min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -573,7 +573,6 @@ export default function Reports() {
                 <option value="ALL">All Statuses</option>
                 <option value="DRAFT">Draft</option>
                 <option value="SUBMITTED">Submitted</option>
-                <option value="APPROVED">Approved</option>
               </select>
               <button onClick={() => void loadData()}
                 className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-3 py-3 text-slate-600 hover:bg-slate-50">
@@ -582,7 +581,50 @@ export default function Reports() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* ── Mobile card list (hidden on md+) ── */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {filtered.length === 0 && (
+              <p className="px-4 py-12 text-center text-sm text-slate-400">No inspections yet.</p>
+            )}
+            {filtered.map((inst) => (
+              <div key={inst.id} className="px-4 py-4 flex items-start gap-3">
+                <div className="h-9 w-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-500 shrink-0">
+                  {TYPE_ICONS[inst.templateType]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{inst.meta.title}</p>
+                    <span className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[inst.status]}`}>
+                      {inst.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {humanizeType(inst.templateType)}
+                    {inst.meta.clientName ? ` · ${inst.meta.clientName}` : ""}
+                  </p>
+                  <p className="text-xs text-slate-400">{fmtDate(inst.updatedAt)}</p>
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => { setSelectedId(inst.id); setEditorOpen(true); }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                      {inst.status === "DRAFT" ? "Edit" : "View"}
+                    </button>
+                    <button onClick={() => void downloadPdf(inst)} disabled={busyInstId === inst.id}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                      {busyInstId === inst.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                      PDF
+                    </button>
+                    <button onClick={() => void deleteInstance(inst)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Desktop table (hidden on mobile) ── */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
@@ -629,16 +671,12 @@ export default function Reports() {
                           className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                           {inst.status === "DRAFT" ? "Edit" : "View"}
                         </button>
-                        <button
-                          onClick={() => void downloadPdf(inst)}
-                          disabled={busyInstId === inst.id}
+                        <button onClick={() => void downloadPdf(inst)} disabled={busyInstId === inst.id}
                           title={inst.pdfPath ? "Download PDF" : "Generate & download PDF"}
-                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                        >
+                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">
                           {busyInstId === inst.id
                             ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <Eye className="h-3.5 w-3.5" />
-                          }
+                            : <Eye className="h-3.5 w-3.5" />}
                         </button>
                         <button onClick={() => void deleteInstance(inst)}
                           className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50">
@@ -693,10 +731,10 @@ export default function Reports() {
         const isReadOnly = selected.status !== "DRAFT" && !forceEdit;
         return (
           <Overlay onClose={() => { setEditorOpen(false); setForceEdit(false); }}>
-            <section className="relative flex h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <section className="relative flex h-[96vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
 
               {/* Header */}
-              <div className="border-b border-slate-100 px-5 pt-5 pb-4 md:px-6">
+              <div className="border-b border-slate-100 px-4 pt-4 pb-3 md:px-6 md:pt-5 md:pb-4 overflow-y-auto max-h-[45vh] md:max-h-none md:overflow-visible">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
@@ -722,7 +760,7 @@ export default function Reports() {
                 </div>
 
                 {/* Meta fields */}
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
                   <div>
                     <label className="mb-1 block text-xs font-medium text-slate-500">Client</label>
                     <input value={selected.meta.clientName} onChange={(e) => patchMeta({ clientName: e.target.value })}
@@ -816,8 +854,14 @@ export default function Reports() {
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
   return (
-    <div className="fixed inset-0 z-70 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-2 md:p-4">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-slate-950/60" />
       <div ref={ref} className="relative z-10 flex w-full justify-center">
         {children}
@@ -828,9 +872,10 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 
 function Stat({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-slate-200">{icon}<span className="text-xs uppercase tracking-wide">{label}</span></div>
-      <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+    <div className="rounded-2xl border border-white/15 bg-white/10 px-2 py-2 md:px-4 md:py-3 backdrop-blur-sm text-center">
+      <div className="flex items-center justify-center gap-1 text-slate-200">{icon}<span className="text-[10px] md:text-xs uppercase tracking-wide hidden sm:inline">{label}</span></div>
+      <p className="text-[10px] md:hidden text-slate-300 mt-0.5 truncate">{label}</p>
+      <p className="mt-1 md:mt-2 text-lg md:text-2xl font-bold text-white">{value}</p>
     </div>
   );
 }

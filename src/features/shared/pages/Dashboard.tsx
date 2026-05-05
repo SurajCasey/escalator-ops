@@ -23,6 +23,7 @@ import AddJobModal from "../../jobs/components/AddJobModal";
 
 type Role = "ADMIN" | "EMPLOYEE";
 type ReportItem = { id: string; title: string; createdAt: string; status: "DRAFT" | "SUBMITTED" | "APPROVED" };
+type LowStockItem = { id: string; name: string; quantity: number; min_quantity: number | null };
 
 /* ─── helpers ─── */
 function fmtTime(v: string) {
@@ -207,15 +208,15 @@ function StatCard({
   icon: React.ReactNode; accent: string; prefix?: string; suffix?: string;
 }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex gap-4 items-start border-t-4 ${accent}`}>
+    <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-3 md:p-5 flex gap-3 items-start border-t-4 ${accent}`}>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{title}</p>
-        <p className="text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">
+        <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase tracking-wide">{title}</p>
+        <p className="text-lg md:text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">
           {prefix}{typeof value === "number" ? value.toLocaleString() : value}{suffix}
         </p>
-        <p className="text-xs text-slate-400 mt-1 truncate">{subtitle}</p>
+        <p className="text-[10px] md:text-xs text-slate-400 mt-0.5 truncate">{subtitle}</p>
       </div>
-      <div className="h-11 w-11 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600 shrink-0">
+      <div className="h-8 w-8 md:h-11 md:w-11 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600 shrink-0">
         {icon}
       </div>
     </div>
@@ -253,6 +254,7 @@ export default function Dashboard() {
   const [weeklyMinutes, setWeeklyMinutes] = useState(0);
   const [weeklyRevenue, setWeeklyRevenue] = useState(0);
   const [myActiveEntry, setMyActiveEntry] = useState<{ id: string; clock_in: string } | null>(null);
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -303,6 +305,18 @@ export default function Dashboard() {
         .is("clock_out", null)
         .maybeSingle();
       if (openEntry.data) setMyActiveEntry(openEntry.data as { id: string; clock_in: string });
+
+      // Low stock inventory items
+      const invRes = await supabase
+        .from("inventory")
+        .select("id, name, quantity, min_quantity")
+        .order("name");
+      if (invRes.data) {
+        const low = (invRes.data as LowStockItem[]).filter(
+          (item) => item.quantity === 0 || (item.min_quantity != null && item.quantity <= item.min_quantity)
+        );
+        setLowStockItems(low);
+      }
 
       setProfileLoading(false);
     };
@@ -432,15 +446,15 @@ export default function Dashboard() {
 
           <div className="flex flex-col items-end gap-4">
             <LiveClock />
-            <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="grid grid-cols-3 gap-2 text-center">
               {[
                 { label: "Today", value: snapshot.todayJobs },
                 { label: "Rate", value: `${snapshot.completionRate}%` },
                 { label: "Overdue", value: snapshot.overdueJobs },
               ].map((s) => (
-                <div key={s.label} className="rounded-xl bg-white/10 border border-white/15 backdrop-blur-sm px-3 py-2.5">
-                  <p className="text-lg font-bold">{s.value}</p>
-                  <p className="text-xs text-slate-300 mt-0.5">{s.label}</p>
+                <div key={s.label} className="rounded-xl bg-white/10 border border-white/15 backdrop-blur-sm px-2 py-2 md:px-3 md:py-2.5">
+                  <p className="text-base md:text-lg font-bold">{s.value}</p>
+                  <p className="text-[10px] md:text-xs text-slate-300 mt-0.5">{s.label}</p>
                 </div>
               ))}
             </div>
@@ -448,8 +462,58 @@ export default function Dashboard() {
         </div>
       </section>
 
+      {/* ── Low Stock Warning ── */}
+      {lowStockItems.length > 0 && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 md:p-5">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 h-9 w-9 rounded-xl bg-amber-100 flex items-center justify-center">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">
+                    {lowStockItems.length} inventory item{lowStockItems.length !== 1 ? "s" : ""} need restocking
+                  </p>
+                  <p className="text-xs text-amber-700 mt-0.5">Items at or below minimum stock level</p>
+                </div>
+                <Link
+                  to={role === "ADMIN" ? "/admin/inventory" : "/inventory"}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-200 px-3 py-1.5 rounded-lg transition-colors shrink-0"
+                >
+                  View Inventory <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {lowStockItems.slice(0, 6).map((item) => (
+                  <span
+                    key={item.id}
+                    className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${
+                      item.quantity === 0
+                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                        : "bg-amber-100 text-amber-800 border-amber-200"
+                    }`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${item.quantity === 0 ? "bg-rose-500" : "bg-amber-500"}`} />
+                    {item.name}
+                    <span className="font-bold ml-0.5">
+                      {item.quantity === 0 ? "Out of stock" : `Qty: ${item.quantity}`}
+                    </span>
+                  </span>
+                ))}
+                {lowStockItems.length > 6 && (
+                  <span className="text-xs text-amber-600 font-medium self-center">
+                    +{lowStockItems.length - 6} more
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ── Stat Cards ── */}
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
         <StatCard
           title="Total Jobs"
           value={snapshot.totalJobs}

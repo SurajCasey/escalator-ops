@@ -143,8 +143,9 @@ export default function Settings() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   /* security fields */
-  const [newPw,  setNewPw]  = useState("");
-  const [confPw, setConfPw] = useState("");
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw,     setNewPw]     = useState("");
+  const [confPw,    setConfPw]    = useState("");
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -236,12 +237,24 @@ export default function Settings() {
 
   /* save password */
   const savePassword = async () => {
-    if (newPw.length < 8) { toast.error("Password must be at least 8 characters."); return; }
+    if (!currentPw) { toast.error("Enter your current password first."); return; }
+    if (newPw.length < 8) { toast.error("New password must be at least 8 characters."); return; }
     if (newPw !== confPw) { toast.error("Passwords do not match."); return; }
+    if (newPw === currentPw) { toast.error("New password must differ from current password."); return; }
     setSaving("security");
+
+    // Re-authenticate with current password first
+    const email = profile?.email ?? "";
+    const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: currentPw });
+    if (signInErr) {
+      toast.error("Current password is incorrect.");
+      setSaving(null);
+      return;
+    }
+
     const { error } = await supabase.auth.updateUser({ password: newPw });
     if (error) { toast.error(error.message); setSaving(null); return; }
-    setNewPw(""); setConfPw("");
+    setCurrentPw(""); setNewPw(""); setConfPw("");
     toast.success("Password updated.");
     setSaving(null);
   };
@@ -472,19 +485,31 @@ export default function Settings() {
                 title="Security"
                 desc="Keep your credentials current and your account protected."
               >
-                <Field label="Change Password" hint="Must be at least 8 characters.">
+                <Field label="Current Password" hint="Required to verify your identity before changing your password.">
+                  <Inp
+                    type="password"
+                    value={currentPw}
+                    onChange={(e) => setCurrentPw(e.target.value)}
+                    placeholder="Your current password"
+                    autoComplete="current-password"
+                  />
+                </Field>
+
+                <Field label="New Password" hint="Must be at least 8 characters and different from current.">
                   <div className="grid gap-3 md:grid-cols-2">
                     <Inp
                       type="password"
                       value={newPw}
                       onChange={(e) => setNewPw(e.target.value)}
                       placeholder="New password"
+                      autoComplete="new-password"
                     />
                     <Inp
                       type="password"
                       value={confPw}
                       onChange={(e) => setConfPw(e.target.value)}
-                      placeholder="Confirm password"
+                      placeholder="Confirm new password"
+                      autoComplete="new-password"
                     />
                   </div>
                 </Field>

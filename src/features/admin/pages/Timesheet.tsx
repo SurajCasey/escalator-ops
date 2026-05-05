@@ -341,93 +341,132 @@ export default function Timesheet() {
         </div>
 
         {/* Summary stats */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-2 md:gap-4">
           {[
-            { label: "Total Employee-Days", value: totals.days.toString() },
+            { label: "Employee-Days", value: totals.days.toString() },
             { label: "Total Hours", value: fmtMins(totals.hours) },
-            { label: "Total Gross Pay", value: `$${totals.pay.toFixed(2)}` },
+            { label: "Gross Pay", value: `$${totals.pay.toFixed(2)}` },
           ].map((s) => (
-            <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide">{s.label}</p>
-              <p className="text-2xl font-bold text-slate-900 mt-1">{s.value}</p>
+            <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-3 md:p-5 shadow-sm">
+              <p className="text-[10px] md:text-xs text-slate-500 uppercase tracking-wide">{s.label}</p>
+              <p className="text-base md:text-2xl font-bold text-slate-900 mt-1 tabular-nums">{s.value}</p>
             </div>
           ))}
         </div>
 
-        {/* Per-employee table */}
+        {/* Per-employee results */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
               <RefreshCw className="animate-spin h-5 w-5 mr-2" /> Loading…
             </div>
+          ) : summaries.length === 0 ? (
+            <p className="text-center py-16 text-slate-400 text-sm">No data for this period.</p>
           ) : (
             <>
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Employee</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Days Worked</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Total Hours</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Hourly Rate</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Gross Pay</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Entries</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {summaries.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-16 text-slate-400 text-sm">No data for this period.</td></tr>
-                  ) : summaries.map((s) => (
-                    <tr key={s.employee.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="font-semibold text-slate-900 text-sm">{s.employee.full_name ?? "—"}</p>
-                        <p className="text-xs text-slate-400">{s.employee.email}</p>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-700 font-medium">{s.daysWorked}</td>
-                      <td className="px-6 py-4 text-sm text-slate-700 font-medium">{fmtMins(s.totalMinutes)}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600">
-                        {s.employee.hourly_rate > 0 ? `$${s.employee.hourly_rate.toFixed(2)}/hr` : <span className="text-amber-600 text-xs">Not set</span>}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-bold text-emerald-700">${s.grossPay.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm text-slate-500">{s.entries.length}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {/* ── Mobile cards (hidden md+) ── */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {summaries.map((s) => (
+                  <details key={s.employee.id} className="group">
+                    <summary className="px-4 py-4 cursor-pointer select-none list-none flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">{s.employee.full_name ?? s.employee.email}</p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                          <span>{fmtMins(s.totalMinutes)}</span>
+                          <span>·</span>
+                          <span>{s.daysWorked} day{s.daysWorked !== 1 ? "s" : ""}</span>
+                          {s.grossPay > 0 && <><span>·</span><span className="font-semibold text-emerald-600">${s.grossPay.toFixed(2)}</span></>}
+                        </div>
+                      </div>
+                      {s.entries.length > 0 && (
+                        <span className="text-xs text-blue-600 font-medium shrink-0">{s.entries.length} entries ▾</span>
+                      )}
+                    </summary>
+                    {s.entries.length > 0 && (
+                      <div className="bg-slate-50 border-t border-slate-100 divide-y divide-slate-100">
+                        {s.entries.map((e) => {
+                          const mins = e.duration_minutes ?? 0;
+                          const pay = s.employee.hourly_rate > 0 ? (mins / 60) * s.employee.hourly_rate : 0;
+                          return (
+                            <div key={e.id} className="px-4 py-2.5 flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-medium text-slate-700">{fmtDate(new Date(e.clock_in))}</p>
+                                <p className="text-xs text-slate-400">{fmtTime(e.clock_in)} → {e.clock_out ? fmtTime(e.clock_out) : <span className="text-emerald-600 font-semibold">Active</span>}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-semibold text-slate-700">{fmtMins(mins)}</p>
+                                {pay > 0 && <p className="text-xs text-emerald-600">${pay.toFixed(2)}</p>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </details>
+                ))}
+              </div>
 
-              {/* Expanded entries per employee */}
-              {summaries.filter((s) => s.entries.length > 0).map((s) => (
-                <details key={s.employee.id} className="border-t border-slate-100">
-                  <summary className="px-6 py-3 text-sm font-medium text-blue-600 cursor-pointer hover:bg-blue-50 select-none">
-                    View {s.entries.length} entries for {s.employee.full_name ?? s.employee.email}
-                  </summary>
-                  <table className="w-full text-sm bg-slate-50">
-                    <thead>
-                      <tr className="border-b border-slate-200">
-                        <th className="text-left px-8 py-2 text-xs font-semibold text-slate-500">Date</th>
-                        <th className="text-left px-6 py-2 text-xs font-semibold text-slate-500">Clock In</th>
-                        <th className="text-left px-6 py-2 text-xs font-semibold text-slate-500">Clock Out</th>
-                        <th className="text-left px-6 py-2 text-xs font-semibold text-slate-500">Duration</th>
-                        <th className="text-left px-6 py-2 text-xs font-semibold text-slate-500">Pay</th>
+              {/* ── Desktop table (hidden on mobile) ── */}
+              <div className="hidden md:block">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50">
+                      {["Employee", "Days Worked", "Total Hours", "Hourly Rate", "Gross Pay", "Entries"].map((h) => (
+                        <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {summaries.map((s) => (
+                      <tr key={s.employee.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4">
+                          <p className="font-semibold text-slate-900 text-sm">{s.employee.full_name ?? "—"}</p>
+                          <p className="text-xs text-slate-400">{s.employee.email}</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-700 font-medium">{s.daysWorked}</td>
+                        <td className="px-6 py-4 text-sm text-slate-700 font-medium">{fmtMins(s.totalMinutes)}</td>
+                        <td className="px-6 py-4 text-sm text-slate-600">
+                          {s.employee.hourly_rate > 0 ? `$${s.employee.hourly_rate.toFixed(2)}/hr` : <span className="text-amber-600 text-xs">Not set</span>}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-bold text-emerald-700">${s.grossPay.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm text-slate-500">{s.entries.length}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {s.entries.map((e) => {
-                        const mins = e.duration_minutes ?? 0;
-                        const pay = s.employee.hourly_rate > 0 ? (mins / 60) * s.employee.hourly_rate : 0;
-                        return (
-                          <tr key={e.id} className="border-b border-slate-100 hover:bg-slate-100">
-                            <td className="px-8 py-2 text-slate-700">{fmtDate(new Date(e.clock_in))}</td>
-                            <td className="px-6 py-2 text-slate-700">{fmtTime(e.clock_in)}</td>
-                            <td className="px-6 py-2 text-slate-600">{e.clock_out ? fmtTime(e.clock_out) : <span className="text-emerald-600 font-semibold">Active</span>}</td>
-                            <td className="px-6 py-2 text-slate-600">{fmtMins(mins)}</td>
-                            <td className="px-6 py-2 text-emerald-700 font-medium">{pay > 0 ? `$${pay.toFixed(2)}` : "—"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </details>
-              ))}
+                    ))}
+                  </tbody>
+                </table>
+
+                {summaries.filter((s) => s.entries.length > 0).map((s) => (
+                  <details key={s.employee.id} className="border-t border-slate-100">
+                    <summary className="px-6 py-3 text-sm font-medium text-blue-600 cursor-pointer hover:bg-blue-50 select-none">
+                      View {s.entries.length} entries for {s.employee.full_name ?? s.employee.email}
+                    </summary>
+                    <table className="w-full text-sm bg-slate-50">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          {["Date", "Clock In", "Clock Out", "Duration", "Pay"].map((h) => (
+                            <th key={h} className="text-left px-6 py-2 text-xs font-semibold text-slate-500">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {s.entries.map((e) => {
+                          const mins = e.duration_minutes ?? 0;
+                          const pay = s.employee.hourly_rate > 0 ? (mins / 60) * s.employee.hourly_rate : 0;
+                          return (
+                            <tr key={e.id} className="border-b border-slate-100 hover:bg-slate-100">
+                              <td className="px-6 py-2 text-slate-700">{fmtDate(new Date(e.clock_in))}</td>
+                              <td className="px-6 py-2 text-slate-700">{fmtTime(e.clock_in)}</td>
+                              <td className="px-6 py-2 text-slate-600">{e.clock_out ? fmtTime(e.clock_out) : <span className="text-emerald-600 font-semibold">Active</span>}</td>
+                              <td className="px-6 py-2 text-slate-600">{fmtMins(mins)}</td>
+                              <td className="px-6 py-2 text-emerald-700 font-medium">{pay > 0 ? `$${pay.toFixed(2)}` : "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </details>
+                ))}
+              </div>
             </>
           )}
         </div>

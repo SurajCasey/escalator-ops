@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
-  Banknote, BarChart3, Building2, CalendarDays, ChevronDown,
+  Banknote, BarChart3, Building2, CalendarDays, CalendarOff, ChevronDown,
   FileText, LayoutDashboard, LogOut, Menu, Package,
   Receipt, Settings, ShoppingCart, Timer, Users, X,
 } from "lucide-react";
@@ -23,10 +23,11 @@ const SECONDARY = [
   { to: "/admin/inventory",         label: "Inventory",  Icon: Package },
   { to: "/admin/purchase-requests", label: "Purchases",  Icon: ShoppingCart },
   { to: "/admin/receipts",          label: "Receipts",   Icon: Receipt },
-  { to: "/admin/payroll",           label: "Payroll",    Icon: Banknote },
-  { to: "/admin/reports",           label: "Reports",    Icon: BarChart3 },
-  { to: "/admin/timesheet",         label: "Timesheet",  Icon: Timer },
-  { to: "/admin/settings",          label: "Settings",   Icon: Settings },
+  { to: "/admin/payroll",           label: "Payroll",      Icon: Banknote },
+  { to: "/admin/reports",           label: "Reports",      Icon: BarChart3 },
+  { to: "/admin/timesheet",         label: "Timesheet",    Icon: Timer },
+  { to: "/admin/availability",      label: "Availability", Icon: CalendarOff },
+  { to: "/admin/settings",          label: "Settings",     Icon: Settings },
 ];
 
 /* ── Class helpers ───────────────────────────────────────── */
