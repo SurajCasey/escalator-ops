@@ -176,10 +176,10 @@ export default function EmployeeLayout() {
       {mobileOpen && (
         <>
           <div
-            className="fixed inset-0 z-[35] bg-slate-950/70 backdrop-blur-md md:hidden"
+            className="fixed inset-0 z-35 bg-slate-950/70 backdrop-blur-md md:hidden"
             onClick={closeMobile}
           />
-          <div className="fixed bottom-0 inset-x-0 z-[36] rounded-t-2xl bg-slate-900 border-t border-slate-700/60 shadow-2xl overflow-hidden md:hidden">
+          <div className="fixed bottom-0 inset-x-0 z-36 rounded-t-2xl bg-slate-900 border-t border-slate-700/60 shadow-2xl overflow-hidden md:hidden">
             <div className="p-4 max-h-[75vh] overflow-y-auto">
               {/* Handle bar */}
               <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4" />
@@ -205,7 +205,7 @@ export default function EmployeeLayout() {
         <button
           type="button"
           onClick={() => setMobileOpen((o) => !o)}
-          className="md:hidden fixed bottom-6 right-6 z-[37] w-14 h-14 rounded-full bg-slate-900 border border-slate-700/60 shadow-2xl text-white flex items-center justify-center transition-all active:scale-95 hover:bg-slate-800"
+          className="md:hidden fixed bottom-6 right-6 z-37 w-14 h-14 rounded-full bg-slate-900 border border-slate-700/60 shadow-2xl text-white flex items-center justify-center transition-all active:scale-95 hover:bg-slate-800"
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
         >
           {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
