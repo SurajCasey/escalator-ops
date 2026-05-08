@@ -539,8 +539,9 @@ export default function Receipts() {
 
       {/* ── Receipts table ───────────────────────────────── */}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="border-b border-slate-100 px-5 py-3 space-y-3">
+          {/* Title row */}
+          <div className="flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-slate-900">
                 {isAdmin
@@ -551,45 +552,42 @@ export default function Receipts() {
               </h2>
               <p className="text-sm text-slate-500">{filtered.length} of {receipts.length} total</p>
             </div>
-            <div className="flex flex-row gap-2 overflow-x-auto pb-0.5">
-              {/* Employee filter (admin only) */}
-              {isAdmin && (
-                <select
-                  value={employeeFilter}
-                  onChange={(e) => setEmployeeFilter(e.target.value)}
-                  className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white"
-                >
-                  <option value="ALL">All Employees</option>
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>{e.name}</option>
-                  ))}
-                </select>
-              )}
-              <label className="relative shrink-0 w-36">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
-                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500" />
-              </label>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
-                <option value="ALL">All Statuses</option>
-                <option value="PENDING">Pending</option>
-                <option value="APPROVED">Approved</option>
-                <option value="PAID">Paid</option>
-                <option value="REJECTED">Rejected</option>
+            {!isAdmin && (
+              <button onClick={() => setShowModal(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
+                <Plus className="h-4 w-4" /><span className="hidden sm:inline">New Receipt</span>
+              </button>
+            )}
+          </div>
+          {/* Filter row — always one horizontal line */}
+          <div className="flex flex-nowrap gap-2 overflow-x-auto pb-0.5">
+            {isAdmin && (
+              <select value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)}
+                className="shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
+                <option value="ALL">All Employees</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
               </select>
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as typeof categoryFilter)}
-                className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
-                <option value="ALL">All Categories</option>
-                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-              {!isAdmin && (
-                <button onClick={() => setShowModal(true)}
-                  className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
-                  <Plus className="h-4 w-4" /> New Receipt
-                </button>
-              )}
+            )}
+            <div className="relative shrink-0 w-32">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
+                className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-2 text-sm text-slate-700 outline-none focus:border-blue-500" />
             </div>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              className="shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
+              <option value="ALL">All Statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="APPROVED">Approved</option>
+              <option value="PAID">Paid</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as typeof categoryFilter)}
+              className="shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
+              <option value="ALL">All Categories</option>
+              {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
           </div>
         </div>
 

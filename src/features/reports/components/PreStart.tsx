@@ -47,7 +47,7 @@ function YesNoNa({
     <button
       type="button"
       onClick={() => onChange(label === "Yes" ? true : label === "No" ? false : null)}
-      className={`min-w-[48px] rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+      className={`min-w-12 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
         active ? color : "bg-slate-100 text-slate-500 hover:bg-slate-200"
       }`}
     >
@@ -81,7 +81,7 @@ function DamageRow({
     <button
       type="button"
       onClick={() => onChange(lbl === "Yes" ? true : lbl === "No" ? false : null)}
-      className={`min-w-[48px] rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+      className={`min-w-12 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
         active ? color : "bg-slate-100 text-slate-500 hover:bg-slate-200"
       }`}
     >

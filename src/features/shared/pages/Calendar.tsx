@@ -11,10 +11,11 @@ type CalendarDay = {
 };
 
 const STATUS_STYLES: Record<JobStatus, string> = {
-  SCHEDULED: "bg-blue-100 text-blue-800",
+  SCHEDULED:   "bg-blue-100 text-blue-800",
   IN_PROGRESS: "bg-amber-100 text-amber-800",
-  COMPLETED: "bg-emerald-100 text-emerald-800",
-  OVERDUE: "bg-rose-100 text-rose-800",
+  COMPLETED:   "bg-emerald-100 text-emerald-800",
+  OVERDUE:     "bg-rose-100 text-rose-800",
+  CANCELLED:   "bg-slate-100 text-slate-500",
 };
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

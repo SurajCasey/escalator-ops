@@ -251,8 +251,8 @@ export default function Clients() {
                             </span>
                           </td>
 
-                          {/* Created */}
-                          <td className="px-6 py-4 text-sm text-slate-500">
+                          {/* Created — desktop only */}
+                          <td className="hidden md:table-cell px-6 py-4 text-sm text-slate-500">
                             {new Date(client.created_at).toLocaleDateString("en-AU", {
                               day: "2-digit", month: "short", year: "numeric",
                             })}

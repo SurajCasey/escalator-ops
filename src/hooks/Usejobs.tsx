@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { sendJobEmails } from "../lib/jobEmails";
 import toast from "react-hot-toast";
 
-export type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
+export type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE" | "CANCELLED";
 export type JobType = "ADHOC" | "CONTRACT";
 
 export type Job = {
@@ -23,6 +23,8 @@ export type Job = {
   job_type: JobType;
   frequency_days: number | null;
   parent_job_id: string | null;
+  booking_id: string | null;
+  cancellation_reason: string | null;
 };
 
 export type JobInput = {
@@ -100,7 +102,23 @@ export function useJobs() {
     if (error) {
       toast.error("Failed to load jobs: " + error.message);
     } else {
-      setJobs(data ?? []);
+      const jobData = data ?? [];
+
+      // Auto-mark SCHEDULED jobs as OVERDUE if scheduled_at is > 1 hour in the past
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const overdueIds = jobData
+        .filter((j) => j.status === "SCHEDULED" && new Date(j.scheduled_at) < oneHourAgo)
+        .map((j) => j.id);
+
+      if (overdueIds.length > 0) {
+        await supabase.from("jobs").update({ status: "OVERDUE" }).in("id", overdueIds);
+        // Reflect change in local data immediately (no extra fetch needed)
+        jobData.forEach((j) => {
+          if (overdueIds.includes(j.id)) j.status = "OVERDUE";
+        });
+      }
+
+      setJobs(jobData);
     }
     setLoading(false);
   }, []);
@@ -196,41 +214,45 @@ export function useJobs() {
       return false;
     }
 
-    if (job) {
-      try {
-        const employeeIds = (assignmentRows ?? []).map((row: { employee_id: string }) => row.employee_id);
-        let recipients: { email: string; name?: string }[] = [];
+    // Best-effort cancellation email — only if an email API is configured.
+    // Never block the UI or show an error toast for email failures.
+    if (job && import.meta.env.VITE_API_BASE_URL?.trim()) {
+      (async () => {
+        try {
+          const employeeIds = (assignmentRows ?? []).map((row: { employee_id: string }) => row.employee_id);
+          let recipients: { email: string; name?: string }[] = [];
 
-        if (employeeIds.length > 0) {
-          const { data: profileRows } = await supabase
-            .from("profiles")
-            .select("email, full_name")
-            .in("id", employeeIds);
+          if (employeeIds.length > 0) {
+            const { data: profileRows } = await supabase
+              .from("profiles")
+              .select("email, full_name")
+              .in("id", employeeIds);
 
-          recipients = (profileRows ?? [])
-            .map((profile: { email: string; full_name: string | null }) => ({
-              email: profile.email,
-              name: profile.full_name ?? undefined,
-            }))
-            .filter((recipient) => recipient.email);
+            recipients = (profileRows ?? [])
+              .map((profile: { email: string; full_name: string | null }) => ({
+                email: profile.email,
+                name: profile.full_name ?? undefined,
+              }))
+              .filter((recipient) => recipient.email);
+          }
+
+          await sendJobEmails({
+            recipients,
+            type: "cancelled",
+            job: {
+              title: job.title,
+              clientName: job.client_name,
+              siteName: job.site_name,
+              scheduledAt: job.scheduled_at,
+              status: job.status,
+              notes: job.notes,
+            },
+          });
+        } catch (emailError) {
+          // Log silently — the deletion already succeeded
+          console.warn("Cancellation email skipped:", emailError);
         }
-
-        await sendJobEmails({
-          recipients,
-          type: "cancelled",
-          job: {
-            title: job.title,
-            clientName: job.client_name,
-            siteName: job.site_name,
-            scheduledAt: job.scheduled_at,
-            status: job.status,
-            notes: job.notes,
-          },
-        });
-      } catch (emailError) {
-        console.error("Failed to send cancellation email", emailError);
-        toast.error(emailError instanceof Error ? emailError.message : "Failed to send cancellation email.");
-      }
+      })();
     }
 
     toast.success("Job deleted.");

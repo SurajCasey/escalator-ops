@@ -41,6 +41,7 @@ type JobDetail = {
   assigned_to_name: string | null;
   notes: string | null;
   job_type: string;
+  cancellation_reason: string | null;
 };
 
 /* ── Helpers ─────────────────────────────────────────────────── */
@@ -49,6 +50,7 @@ const STATUS_STYLE: Record<string, string> = {
   IN_PROGRESS: "bg-amber-50 text-amber-700 border-amber-100",
   COMPLETED:   "bg-emerald-50 text-emerald-700 border-emerald-100",
   OVERDUE:     "bg-rose-50 text-rose-700 border-rose-100",
+  CANCELLED:   "bg-slate-100 text-slate-500 border-slate-200",
 };
 
 const PHOTO_TYPE_COLORS: Record<string, string> = {
@@ -123,7 +125,7 @@ export default function JobDetailPanel({
       const [jobRes, photosRes, compRes, escRes] = await Promise.all([
         supabase
           .from("jobs")
-          .select("id, title, client_name, site_name, scheduled_at, status, assigned_to_name, notes, job_type")
+          .select("id, title, client_name, site_name, scheduled_at, status, assigned_to_name, notes, job_type, cancellation_reason")
           .eq("id", jobId)
           .single(),
         supabase
@@ -249,6 +251,16 @@ export default function JobDetailPanel({
                     </div>
                   )}
                 </div>
+
+                {job.status === "CANCELLED" && (
+                  <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2.5 text-sm flex gap-2">
+                    <X className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-rose-600 mb-0.5">Cancellation Reason</p>
+                      <p className="text-rose-800">{job.cancellation_reason ?? "No reason provided"}</p>
+                    </div>
+                  </div>
+                )}
 
                 {job.notes && (
                   <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 text-sm text-slate-600 flex gap-2">

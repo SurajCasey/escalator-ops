@@ -551,31 +551,31 @@ export default function Reports() {
               </button>
             </div>
 
-            <div className="mt-4 flex flex-row gap-2 flex-wrap">
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div className="mt-4 flex flex-nowrap gap-2 overflow-x-auto pb-0.5">
+              <div className="relative shrink-0 w-36">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by title, client, site, creator…"
-                  className="w-full rounded-2xl border border-slate-200 py-3 pl-9 pr-3 text-sm outline-none focus:border-sky-500"
+                  placeholder="Search…"
+                  className="w-full rounded-2xl border border-slate-200 py-2 pl-8 pr-3 text-sm outline-none focus:border-sky-500"
                 />
               </div>
               <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-sky-500">
+                className="shrink-0 rounded-2xl border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-sky-500">
                 <option value="ALL">All Types</option>
                 <option value="PRESTART">Pre-start</option>
                 <option value="SWMS">SWMS</option>
                 <option value="GENERAL">General</option>
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-sky-500">
+                className="shrink-0 rounded-2xl border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-sky-500">
                 <option value="ALL">All Statuses</option>
                 <option value="DRAFT">Draft</option>
                 <option value="SUBMITTED">Submitted</option>
               </select>
               <button onClick={() => void loadData()}
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-3 py-3 text-slate-600 hover:bg-slate-50">
+                className="shrink-0 inline-flex items-center justify-center rounded-2xl border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
                 <RefreshCw className="h-4 w-4" />
               </button>
             </div>

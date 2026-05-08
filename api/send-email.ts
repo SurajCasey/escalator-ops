@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY)
       return res.status(500).json({ error: "Missing Supabase env vars" });
 
-    const fromAddress = RESEND_FROM_EMAIL?.trim() || "Operations <onboarding@resend.dev>";
+    const fromAddress = RESEND_FROM_EMAIL?.trim() || "Statewide Operations <onboarding@resend.dev>";
 
     const resend = new Resend(RESEND_API_KEY);
 

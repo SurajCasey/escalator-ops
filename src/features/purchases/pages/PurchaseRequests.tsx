@@ -373,35 +373,35 @@ export default function PurchaseRequests() {
 
       {/* Table */}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="border-b border-slate-100 px-5 py-3 space-y-3">
+          <div className="flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-slate-900">{isAdmin ? "All Requests" : "My Requests"}</h2>
               <p className="text-sm text-slate-500">{requests.length} total</p>
             </div>
-            <div className="flex flex-row gap-2 flex-wrap">
-              <label className="relative flex-1 min-w-0">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items…"
-                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500" />
-              </label>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
-                <option value="ALL">All Statuses</option>
-                <option value="PENDING">Pending</option>
-                <option value="ORDERED">Ordered</option>
-                <option value="RECEIVED">Received</option>
-                <option value="REJECTED">Rejected</option>
-              </select>
-              <button onClick={() => setUrgencySort((s) => s === "desc" ? "asc" : "desc")}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                Urgency {urgencySort === "desc" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-              </button>
-              <button onClick={() => setShowModal(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
-                <Plus className="h-4 w-4" /> New Request
-              </button>
+            <button onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors">
+              <Plus className="h-4 w-4" /><span className="hidden sm:inline">New Request</span>
+            </button>
+          </div>
+          <div className="flex flex-nowrap gap-2 overflow-x-auto pb-0.5">
+            <div className="relative shrink-0 w-32">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
+                className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-2 text-sm text-slate-700 outline-none focus:border-blue-500" />
             </div>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              className="shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-blue-500 bg-white">
+              <option value="ALL">All Statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="ORDERED">Ordered</option>
+              <option value="RECEIVED">Received</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+            <button onClick={() => setUrgencySort((s) => s === "desc" ? "asc" : "desc")}
+              className="shrink-0 flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+              Urgency {urgencySort === "desc" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+            </button>
           </div>
         </div>
 

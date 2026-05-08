@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
-  Banknote, BarChart3, Building2, CalendarDays, CalendarOff, ChevronDown,
+  Banknote, BarChart3, Bell, Building2, CalendarDays, CalendarOff, ChevronDown,
   FileText, LayoutDashboard, LogOut, Menu, Package,
   Receipt, Settings, ShoppingCart, Timer, Users, X,
 } from "lucide-react";
+import { supabase } from "../lib/supabase";
 import Logo from "../assets/Logo.png";
 import LogoutButton from "../components/LogoutButton";
 import { useIdleLogout } from "../hooks/useIdleLogout";
-import { supabase } from "../lib/supabase";
 
 /* ── Nav definition ──────────────────────────────────────── */
 const PRIMARY = [
@@ -44,6 +44,52 @@ const mobileGridClass = ({ isActive }: { isActive: boolean }) =>
       ? "bg-blue-600 text-white"
       : "text-slate-400 hover:bg-white/10 hover:text-white"
   }`;
+
+/* ── Notification Bell ───────────────────────────────────── */
+function NotificationBell() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const fetch = async () => {
+      const today   = new Date().toISOString().split("T")[0];
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const results = await Promise.allSettled([
+        supabase.from("invoices").select("id", { count: "exact", head: true }).neq("status", "PAID").neq("status", "CANCELLED").lt("due_date", today),
+        supabase.from("receipts").select("id", { count: "exact", head: true }).eq("status", "PENDING"),
+        supabase.from("employee_availability").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
+        supabase.from("payroll_runs").select("id", { count: "exact", head: true }).neq("status", "PAID").lt("period_end", today),
+        supabase.from("inventory").select("id", { count: "exact", head: true }).eq("quantity", 0),
+      ]);
+
+      const total = results.reduce((sum, r) => {
+        if (r.status === "fulfilled" && r.value.count != null) return sum + r.value.count;
+        return sum;
+      }, 0);
+
+      setCount(total);
+    };
+    fetch();
+    // Refresh every 2 minutes
+    const interval = setInterval(fetch, 120_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <NavLink
+      to="/admin/dashboard"
+      className="relative p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+      aria-label="Notifications"
+    >
+      <Bell className="h-5 w-5" />
+      {count > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </NavLink>
+  );
+}
 
 /* ── "More" dropdown (desktop) ───────────────────────────── */
 function MoreMenu() {
@@ -157,6 +203,11 @@ export default function AdminLayout() {
               </NavLink>
             ))}
           </nav>
+
+          {/* Notification bell */}
+          <div className="hidden md:block ml-1">
+            <NotificationBell />
+          </div>
 
           {/* More dropdown — md+ */}
           <div className="hidden md:block ml-1">

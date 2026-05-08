@@ -15,8 +15,8 @@ import {
 } from "lucide-react";
 import { useJobs, type Job, type JobStatus, frequencyLabel } from "../../../hooks/Usejobs";
 import { useRole } from "../../../hooks/useRole";
-import AddJobModal from "../../jobs/components/AddJobModal";
 import BookingModal from "../../jobs/components/BookingModal";
+import EditBookingModal from "../../jobs/components/EditBookingModal";
 import JobDetailPanel from "../../jobs/components/JobDetailPanel";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -38,6 +38,7 @@ const STATUS_STYLES: Record<JobStatus, string> = {
   IN_PROGRESS: "bg-amber-50 text-amber-700 border-amber-100",
   COMPLETED:   "bg-emerald-50 text-emerald-700 border-emerald-100",
   OVERDUE:     "bg-rose-50 text-rose-700 border-rose-100",
+  CANCELLED:   "bg-slate-100 text-slate-500 border-slate-200",
 };
 
 const CAL_STATUS_STYLES: Record<JobStatus, string> = {
@@ -45,6 +46,7 @@ const CAL_STATUS_STYLES: Record<JobStatus, string> = {
   IN_PROGRESS: "bg-amber-100 text-amber-800",
   COMPLETED:   "bg-emerald-100 text-emerald-800",
   OVERDUE:     "bg-rose-100 text-rose-800",
+  CANCELLED:   "bg-slate-100 text-slate-500",
 };
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -151,14 +153,15 @@ export default function Schedule() {
   // List state
   const [search, setSearch]           = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | JobStatus>("ALL");
+  // Default: hide cancelled jobs unless explicitly filtered
+
   const [shiftFilter, setShiftFilter]   = useState<"ALL" | ShiftName>("ALL");
-  const [editing, setEditing]           = useState<Job | null>(null);
+  const [editingJob, setEditingJob]     = useState<Job | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [expandedBookings, setExpandedBookings] = useState<Set<string>>(new Set());
 
   // Shared state
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [showEditModal, setShowEditModal]       = useState(false);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
 
   // ── Calendar data ──────────────────────────────────────────────────────────
@@ -212,7 +215,7 @@ export default function Schedule() {
   };
 
   const openAdd  = () => setShowBookingModal(true);
-  const openEdit = (job: Job) => { setEditing(job); setShowEditModal(true); };
+  const openEdit = (job: Job) => setEditingJob(job);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -460,31 +463,32 @@ export default function Schedule() {
       {view === "list" && (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-5 py-4">
-            <div className="flex flex-row gap-2 flex-wrap items-center">
-              <label className="relative flex-1 min-w-0">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div className="flex flex-nowrap gap-2 overflow-x-auto pb-0.5 items-center">
+              <div className="relative shrink-0 w-36">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search jobs, clients, crew…"
-                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-teal-500"
+                  placeholder="Search…"
+                  className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-2 text-sm text-slate-700 outline-none focus:border-teal-500"
                 />
-              </label>
+              </div>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-500 bg-white"
+                className="shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-teal-500 bg-white"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="SCHEDULED">Scheduled</option>
                 <option value="IN_PROGRESS">In Progress</option>
                 <option value="COMPLETED">Completed</option>
                 <option value="OVERDUE">Overdue</option>
+                <option value="CANCELLED">Cancelled</option>
               </select>
               <select
                 value={shiftFilter}
                 onChange={(e) => setShiftFilter(e.target.value as typeof shiftFilter)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-500 bg-white"
+                className="shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-teal-500 bg-white"
               >
                 <option value="ALL">All Shifts</option>
                 <option value="Morning">Morning</option>
@@ -509,9 +513,10 @@ export default function Schedule() {
                 const first = bJobs[0];
                 const last  = bJobs[bJobs.length - 1];
                 const allDone = bJobs.every(j => j.status === "COMPLETED");
+                const allCancelled = bJobs.every(j => j.status === "CANCELLED");
                 const anyActive = bJobs.some(j => j.status === "IN_PROGRESS");
                 const anyOverdue = bJobs.some(j => j.status === "OVERDUE");
-                const summaryStatus: JobStatus = allDone ? "COMPLETED" : anyActive ? "IN_PROGRESS" : anyOverdue ? "OVERDUE" : "SCHEDULED";
+                const summaryStatus: JobStatus = allCancelled ? "CANCELLED" : allDone ? "COMPLETED" : anyActive ? "IN_PROGRESS" : anyOverdue ? "OVERDUE" : "SCHEDULED";
                 const dateRange = bJobs.length === 1
                   ? formatDateTime(first.scheduled_at)
                   : `${formatDateTime(first.scheduled_at)} → ${formatDateTime(last.scheduled_at)}`;
@@ -519,29 +524,40 @@ export default function Schedule() {
                 return (
                   <div key={bookingId}>
                     {/* Booking summary row */}
-                    <button
-                      onClick={() => setExpandedBookings(prev => {
-                        const next = new Set(prev);
-                        next.has(bookingId) ? next.delete(bookingId) : next.add(bookingId);
-                        return next;
-                      })}
-                      className="w-full flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition text-left"
-                    >
-                      <ChevronRight className={`h-4 w-4 text-slate-400 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-slate-900">{first.client_name}</p>
-                          <span className="text-xs font-medium bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
-                            {bJobs.length}-day booking
-                          </span>
-                          {first.site_name && <p className="text-xs text-slate-500">{first.site_name}</p>}
+                    <div className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition group">
+                      <button
+                        onClick={() => setExpandedBookings(prev => {
+                          const next = new Set(prev);
+                          next.has(bookingId) ? next.delete(bookingId) : next.add(bookingId);
+                          return next;
+                        })}
+                        className="flex items-center gap-4 flex-1 min-w-0 text-left"
+                      >
+                        <ChevronRight className={`h-4 w-4 text-slate-400 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className={`font-semibold ${summaryStatus === "CANCELLED" ? "text-slate-400 line-through" : "text-slate-900"}`}>{first.client_name}</p>
+                            <span className="text-xs font-medium bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
+                              {bJobs.length}-day booking
+                            </span>
+                            {first.site_name && <p className="text-xs text-slate-500">{first.site_name}</p>}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">{dateRange}</p>
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5">{dateRange}</p>
-                      </div>
+                      </button>
                       <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium shrink-0 ${STATUS_STYLES[summaryStatus]}`}>
                         {humanize(summaryStatus)}
                       </span>
-                    </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => openEdit(first)}
+                          className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-slate-200 hover:border-blue-200 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Edit entire booking"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Edit Booking
+                        </button>
+                      )}
+                    </div>
 
                     {/* Expanded day rows */}
                     {expanded && (
@@ -566,10 +582,6 @@ export default function Schedule() {
                                     <RotateCcw className="h-3.5 w-3.5" />
                                   </button>
                                 )}
-                                <button onClick={() => openEdit(job)}
-                                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition" title="Edit">
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
                                 <button onClick={() => setConfirmDelete(job.id)}
                                   className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition" title="Delete">
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -591,7 +603,7 @@ export default function Schedule() {
                   onClick={() => setDetailJobId(job.id)}>
                   <div className="w-4 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-900 truncate">{job.title}</p>
+                    <p className={`font-medium truncate ${job.status === "CANCELLED" ? "text-slate-400 line-through" : "text-slate-900"}`}>{job.title}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
                       {job.client_name} · {formatDateTime(job.scheduled_at)} · {getShift(job.scheduled_at)}
                       {job.assigned_to_name && ` · ${job.assigned_to_name}`}
@@ -640,13 +652,13 @@ export default function Schedule() {
         />
       )}
 
-      {/* ── Edit existing job modal (admin only) ───────────────────────────── */}
+      {/* ── Edit booking modal (admin only) ───────────────────────────────── */}
       {isAdmin && (
-        <AddJobModal
-          open={showEditModal}
-          onClose={() => { setShowEditModal(false); setEditing(null); }}
+        <EditBookingModal
+          open={!!editingJob}
+          job={editingJob}
+          onClose={() => setEditingJob(null)}
           onSaved={fetchJobs}
-          editing={editing}
         />
       )}
 
