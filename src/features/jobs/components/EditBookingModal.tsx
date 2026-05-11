@@ -1,31 +1,28 @@
 /**
- * EditBookingModal — edit the whole booking at once.
+ * EditBookingModal — edit a job and all its visits.
  *
- * When a job has a booking_id, all sibling jobs are fetched and editable
- * together (common fields + per-job date/status). Standalone jobs (no booking_id)
- * behave the same but with a single entry in the jobs list.
- *
- * Also supports cancelling the entire booking (or the single job) with a reason.
+ * Loads visits from the `visits` table for the given parent job.
+ * Team is managed via `visit_assignments` (new model).
+ * Cancel sets the parent job + all visits to CANCELLED.
  */
 
 import { useEffect, useState } from "react";
 import {
   AlertTriangle, Ban, CalendarDays, Check,
-  ChevronDown, DollarSign, FileText, MapPin,
+  ChevronDown, Clock, DollarSign, FileText, MapPin,
   Save, Users, X,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
-import type { Job, JobStatus } from "../../../hooks/Usejobs";
+import type { Job, JobStatus, VisitStatus } from "../../../hooks/Usejobs";
 import toast from "react-hot-toast";
 
 /* ── Types ───────────────────────────────────────────────── */
 type Employee = { id: string; full_name: string | null; email: string; avatar_url?: string | null };
 
-type JobRow = {
+type VisitRow = {
   id: string;
-  title: string;
   scheduled_at: string; // datetime-local string for input
-  status: JobStatus;
+  status: VisitStatus;
 };
 
 type Props = {
@@ -51,14 +48,16 @@ function toLocalDatetime(iso: string) {
 }
 
 function fmtDate(iso: string) {
+  if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-AU", {
     weekday: "short", day: "numeric", month: "short", year: "numeric",
   });
 }
 
-const STATUS_OPTIONS: JobStatus[] = ["SCHEDULED", "IN_PROGRESS", "COMPLETED", "OVERDUE"];
+const VISIT_STATUS_OPTIONS: VisitStatus[] = ["SCHEDULED", "IN_PROGRESS", "COMPLETED", "OVERDUE", "CANCELLED"];
 
-const STATUS_COLORS: Record<JobStatus, string> = {
+const STATUS_COLORS: Record<string, string> = {
+  DRAFT:       "bg-slate-50 text-slate-500 border-slate-200",
   SCHEDULED:   "bg-blue-50 text-blue-700 border-blue-200",
   IN_PROGRESS: "bg-amber-50 text-amber-700 border-amber-200",
   COMPLETED:   "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -72,7 +71,7 @@ function humanize(s: string) {
 
 /* ════════════════════════════════════════════════════════════ */
 export default function EditBookingModal({ open, job, onClose, onSaved }: Props) {
-  const [jobRows, setJobRows]               = useState<JobRow[]>([]);
+  const [visitRows, setVisitRows]           = useState<VisitRow[]>([]);
   const [siteName, setSiteName]             = useState("");
   const [flatRate, setFlatRate]             = useState("");
   const [notes, setNotes]                   = useState("");
@@ -86,40 +85,35 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
   const [cancelReason, setCancelReason]       = useState("");
   const [cancelling, setCancelling]           = useState(false);
 
-  /* ── Load booking data ─── */
+  /* ── Load job data + visits + team ─── */
   useEffect(() => {
     if (!open || !job) return;
     setShowCancelPanel(false); setCancelReason("");
     setLoadingData(true);
 
     const load = async () => {
-      // Fetch all sibling jobs (same booking_id), or just this job
-      let siblingJobs: Job[] = [];
-      if (job.booking_id) {
-        const { data } = await supabase
-          .from("jobs")
-          .select("*")
-          .eq("booking_id", job.booking_id)
-          .order("scheduled_at");
-        siblingJobs = (data ?? []) as Job[];
-      } else {
-        siblingJobs = [job];
-      }
+      // Fetch visits for this job
+      const { data: visits } = await supabase
+        .from("visits")
+        .select("id, scheduled_at, status")
+        .eq("job_id", job.id)
+        .neq("status", "CANCELLED")
+        .order("scheduled_at");
 
-      setJobRows(siblingJobs.map(j => ({
-        id: j.id,
-        title: j.title,
-        scheduled_at: toLocalDatetime(j.scheduled_at),
-        status: j.status,
-      })));
+      setVisitRows(
+        ((visits ?? []) as { id: string; scheduled_at: string; status: VisitStatus }[]).map(v => ({
+          id: v.id,
+          scheduled_at: toLocalDatetime(v.scheduled_at),
+          status: v.status,
+        }))
+      );
 
-      // Common fields from first job
-      const first = siblingJobs[0];
-      setSiteName(first.site_name ?? "");
-      setFlatRate(first.flat_rate != null ? String(first.flat_rate) : "");
-      setNotes(first.notes ?? "");
+      // Common fields from parent job
+      setSiteName(job.site_name ?? "");
+      setFlatRate(job.flat_rate != null ? String(job.flat_rate) : "");
+      setNotes(job.notes ?? "");
 
-      // Load employees
+      // Load all active employees
       const { data: empData } = await supabase
         .from("profiles")
         .select("id, full_name, email, avatar_url")
@@ -127,12 +121,18 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
         .order("full_name");
       setEmployees((empData ?? []) as Employee[]);
 
-      // Load current assignments from first job
-      const { data: assignData } = await supabase
-        .from("job_assignments")
-        .select("employee_id")
-        .eq("job_id", first.id);
-      setAssignedEmployees((assignData ?? []).map((r: { employee_id: string }) => r.employee_id));
+      // Load current team from visit_assignments (deduplicated across all visits)
+      const visitIds = ((visits ?? []) as { id: string }[]).map(v => v.id);
+      if (visitIds.length > 0) {
+        const { data: vaRows } = await supabase
+          .from("visit_assignments")
+          .select("employee_id")
+          .in("visit_id", visitIds);
+        const uniqueIds = [...new Set((vaRows ?? []).map((r: { employee_id: string }) => r.employee_id))];
+        setAssignedEmployees(uniqueIds);
+      } else {
+        setAssignedEmployees([]);
+      }
 
       setLoadingData(false);
     };
@@ -145,10 +145,21 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
   const toggleEmployee = (id: string) =>
     setAssignedEmployees(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]);
 
-  const updateRow = <K extends keyof JobRow>(idx: number, key: K, value: JobRow[K]) =>
-    setJobRows(prev => prev.map((r, i) => i === idx ? { ...r, [key]: value } : r));
+  const updateRow = <K extends keyof VisitRow>(idx: number, key: K, value: VisitRow[K]) =>
+    setVisitRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r;
+      const updated = { ...r, [key]: value };
+      // Auto-reset OVERDUE status when the date is moved into the future
+      if (key === "scheduled_at" && updated.status === "OVERDUE") {
+        const newDate = new Date(value as string);
+        if (!isNaN(newDate.getTime()) && newDate > new Date()) {
+          updated.status = "SCHEDULED";
+        }
+      }
+      return updated;
+    }));
 
-  const isBooking = !!job.booking_id && jobRows.length > 1;
+  const hasMultipleVisits = visitRows.length > 1;
 
   /* ── Save all changes ─── */
   const handleSave = async () => {
@@ -156,27 +167,54 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
     const rate = flatRate ? parseFloat(flatRate) : null;
 
     try {
-      for (const row of jobRows) {
-        const { error: updateErr } = await supabase.from("jobs").update({
-          site_name:   siteName || null,
-          flat_rate:   rate,
-          notes:       notes || null,
-          status:      row.status,
-          scheduled_at: new Date(row.scheduled_at).toISOString(),
-        }).eq("id", row.id);
-        if (updateErr) throw new Error(updateErr.message);
+      // Update parent job shared fields
+      const { error: jobErr } = await supabase.from("jobs").update({
+        site_name: siteName || null,
+        flat_rate:  rate,
+        notes:      notes || null,
+      }).eq("id", job.id);
+      if (jobErr) throw new Error(jobErr.message);
 
-        // Re-sync team for all jobs in booking
-        const { error: delErr } = await supabase.from("job_assignments").delete().eq("job_id", row.id);
+      // Update each visit's scheduled_at and status
+      // Safety net: if a visit is OVERDUE but its new date is in the future, reset to SCHEDULED
+      const now = new Date();
+      for (const row of visitRows) {
+        const newDate = new Date(row.scheduled_at);
+        const resolvedStatus: VisitStatus =
+          row.status === "OVERDUE" && newDate > now ? "SCHEDULED" : row.status;
+
+        const { error: visitErr } = await supabase.from("visits").update({
+          scheduled_at: newDate.toISOString(),
+          status:        resolvedStatus,
+        }).eq("id", row.id);
+        if (visitErr) throw new Error(visitErr.message);
+      }
+
+      // If the parent job is OVERDUE but all visits are now in the future, reset it to SCHEDULED
+      const allFuture = visitRows.every(r => new Date(r.scheduled_at) > now);
+      if (job.status === "OVERDUE" && allFuture) {
+        await supabase.from("jobs").update({ status: "SCHEDULED" }).eq("id", job.id);
+      }
+
+      // Re-sync team: replace visit_assignments for all visits
+      const visitIds = visitRows.map(r => r.id);
+      if (visitIds.length > 0) {
+        const { error: delErr } = await supabase
+          .from("visit_assignments")
+          .delete()
+          .in("visit_id", visitIds);
         if (delErr) throw new Error(delErr.message);
-        if (assignedEmployees.length > 0) {
-          const { error: insErr } = await supabase.from("job_assignments").insert(
-            assignedEmployees.map(emp_id => ({ job_id: row.id, employee_id: emp_id }))
+
+        if (assignedEmployees.length > 0 && visitIds.length > 0) {
+          const insRows = visitIds.flatMap(vid =>
+            assignedEmployees.map(empId => ({ visit_id: vid, employee_id: empId }))
           );
+          const { error: insErr } = await supabase.from("visit_assignments").insert(insRows);
           if (insErr) throw new Error(insErr.message);
         }
       }
-      toast.success(isBooking ? "Booking updated." : "Job updated.");
+
+      toast.success(hasMultipleVisits ? "Booking updated." : "Job updated.");
       onSaved();
       onClose();
     } catch (err) {
@@ -186,19 +224,29 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
     }
   };
 
-  /* ── Cancel booking ─── */
+  /* ── Cancel booking (job + all visits) ─── */
   const handleCancel = async () => {
     if (!cancelReason.trim()) { toast.error("Please enter a reason."); return; }
     setCancelling(true);
     try {
-      for (const row of jobRows) {
-        const { error } = await supabase.from("jobs").update({
-          status: "CANCELLED",
-          cancellation_reason: cancelReason.trim(),
-        }).eq("id", row.id);
-        if (error) throw new Error(error.message);
+      // Cancel the parent job
+      const { error: jobErr } = await supabase.from("jobs").update({
+        status: "CANCELLED" as JobStatus,
+        cancellation_reason: cancelReason.trim(),
+      }).eq("id", job.id);
+      if (jobErr) throw new Error(jobErr.message);
+
+      // Cancel all visits
+      const visitIds = visitRows.map(r => r.id);
+      if (visitIds.length > 0) {
+        const { error: visitErr } = await supabase
+          .from("visits")
+          .update({ status: "CANCELLED" as VisitStatus })
+          .in("id", visitIds);
+        if (visitErr) throw new Error(visitErr.message);
       }
-      toast.success(isBooking ? "Booking cancelled." : "Job cancelled.");
+
+      toast.success(hasMultipleVisits ? "Booking cancelled." : "Job cancelled.");
       onSaved();
       onClose();
     } catch (err) {
@@ -219,11 +267,11 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white z-10">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">
-              {isBooking ? "Edit Booking" : "Edit Job"}
+              {hasMultipleVisits ? "Edit Booking" : "Edit Job"}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              {isBooking
-                ? `${jobRows.length} jobs · ${job.client_name}`
+              {hasMultipleVisits
+                ? `${visitRows.length} visits · ${job.client_name}`
                 : job.client_name}
             </p>
           </div>
@@ -239,19 +287,28 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
           ) : (
             <>
 
-              {/* ── Jobs in booking ── */}
+              {/* ── Visits ── */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <CalendarDays className="h-4 w-4 text-slate-400" />
                   <h3 className="text-sm font-semibold text-slate-800">
-                    {isBooking ? `Scheduled Days (${jobRows.length})` : "Scheduled Date & Time"}
+                    {hasMultipleVisits
+                      ? `Scheduled Visits (${visitRows.length})`
+                      : "Scheduled Date & Time"}
                   </h3>
                 </div>
+
+                {visitRows.length === 0 && (
+                  <p className="text-sm text-slate-400 py-4 text-center">
+                    No active visits — all may have been cancelled.
+                  </p>
+                )}
+
                 <div className="space-y-2">
-                  {jobRows.map((row, idx) => (
+                  {visitRows.map((row, idx) => (
                     <div key={row.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {isBooking && (
+                        {hasMultipleVisits && (
                           <div className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
                             {idx + 1}
                           </div>
@@ -265,18 +322,19 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
                         <div className="relative">
                           <select
                             value={row.status}
-                            onChange={e => updateRow(idx, "status", e.target.value as JobStatus)}
-                            className={`pl-2 pr-7 py-1.5 text-xs font-medium rounded-lg border appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 ${STATUS_COLORS[row.status]}`}
+                            onChange={e => updateRow(idx, "status", e.target.value as VisitStatus)}
+                            className={`pl-2 pr-7 py-1.5 text-xs font-medium rounded-lg border appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 ${STATUS_COLORS[row.status] ?? STATUS_COLORS.SCHEDULED}`}
                           >
-                            {STATUS_OPTIONS.map(s => (
+                            {VISIT_STATUS_OPTIONS.map(s => (
                               <option key={s} value={s}>{humanize(s)}</option>
                             ))}
                           </select>
                           <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none text-current opacity-60" />
                         </div>
                       </div>
-                      {isBooking && (
-                        <p className="text-[10px] text-slate-400 mt-1.5 ml-7">
+                      {hasMultipleVisits && (
+                        <p className="text-[10px] text-slate-400 mt-1.5 ml-7 flex items-center gap-1">
+                          <Clock className="h-2.5 w-2.5" />
                           {fmtDate(row.scheduled_at || new Date().toISOString())}
                         </p>
                       )}
@@ -305,16 +363,16 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
                       onChange={e => setFlatRate(e.target.value)} placeholder="0.00"
                       className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  {isBooking && flatRate && (
+                  {hasMultipleVisits && flatRate && (
                     <p className="text-xs text-slate-400 mt-1">
-                      Total: ${(parseFloat(flatRate) * jobRows.length).toFixed(2)} across {jobRows.length} days
+                      Total: ${(parseFloat(flatRate) * visitRows.length).toFixed(2)} across {visitRows.length} visits
                     </p>
                   )}
                 </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 mb-1.5">
                     <FileText className="h-3.5 w-3.5 text-slate-400" /> Notes
-                    {isBooking && <span className="text-[10px] text-slate-400 font-normal">(applied to all jobs)</span>}
+                    {hasMultipleVisits && <span className="text-[10px] text-slate-400 font-normal">(applies to all visits)</span>}
                   </label>
                   <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
                     placeholder="Access codes, special instructions…"
@@ -327,7 +385,7 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
                 <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
                   <Users className="h-4 w-4 text-slate-500" />
                   <span className="text-sm font-semibold text-slate-800">Team Members</span>
-                  {isBooking && <span className="text-[10px] text-slate-400">(applied to all jobs)</span>}
+                  {hasMultipleVisits && <span className="text-[10px] text-slate-400">(assigned to all visits)</span>}
                   <span className="ml-auto text-xs text-slate-500">
                     {assignedEmployees.length > 0 ? `${assignedEmployees.length} selected` : "None"}
                   </span>
@@ -362,11 +420,11 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
                     <p className="text-sm font-semibold text-rose-800">
-                      Cancel {isBooking ? `this booking (${jobRows.length} jobs)` : "this job"}?
+                      Cancel {hasMultipleVisits ? `this booking (${visitRows.length} visits)` : "this job"}?
                     </p>
                   </div>
                   <p className="text-xs text-rose-600">
-                    The {isBooking ? "jobs" : "job"} will be marked as <strong>Cancelled</strong> and kept in the records. This cannot be undone easily.
+                    The job and {hasMultipleVisits ? "all its visits" : "its visit"} will be marked as <strong>Cancelled</strong> and kept in records.
                   </p>
                   <textarea
                     value={cancelReason}
@@ -384,7 +442,7 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
                     <button type="button" onClick={handleCancel} disabled={cancelling || !cancelReason.trim()}
                       className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60">
                       <Ban className="h-4 w-4" />
-                      {cancelling ? "Cancelling…" : `Confirm Cancellation`}
+                      {cancelling ? "Cancelling…" : "Confirm Cancellation"}
                     </button>
                   </div>
                 </div>
@@ -393,7 +451,7 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
                   onClick={() => setShowCancelPanel(true)}
                   className="flex items-center gap-2 text-sm font-medium text-rose-600 hover:text-rose-800 transition-colors">
                   <Ban className="h-4 w-4" />
-                  Cancel {isBooking ? "entire booking" : "this job"}…
+                  Cancel {hasMultipleVisits ? "entire booking" : "this job"}…
                 </button>
               )}
             </>
@@ -410,7 +468,7 @@ export default function EditBookingModal({ open, job, onClose, onSaved }: Props)
             <button type="button" onClick={handleSave} disabled={saving}
               className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
               <Save className="h-4 w-4" />
-              {saving ? "Saving…" : isBooking ? "Save All Changes" : "Save Changes"}
+              {saving ? "Saving…" : hasMultipleVisits ? "Save All Changes" : "Save Changes"}
             </button>
           </div>
         )}

@@ -3,73 +3,117 @@ import { supabase } from "../lib/supabase";
 import { sendJobEmails } from "../lib/jobEmails";
 import toast from "react-hot-toast";
 
-export type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE" | "CANCELLED";
-export type JobType = "ADHOC" | "CONTRACT";
+export type JobStatus  = "DRAFT" | "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE" | "CANCELLED";
+export type VisitStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE" | "CANCELLED";
+export type JobType    = "ADHOC" | "CONTRACT";
 
+/* ── Parent Job ────────────────────────────────────────────── */
 export type Job = {
   id: string;
   title: string;
   client_id: string | null;
   client_name: string;
   site_name: string | null;
-  assigned_to: string | null;
-  assigned_to_name: string | null;
   status: JobStatus;
-  scheduled_at: string;
-  completed_at: string | null;
   flat_rate: number | null;
   notes: string | null;
   created_at: string;
   job_type: JobType;
-  frequency_days: number | null;
-  parent_job_id: string | null;
-  booking_id: string | null;
   cancellation_reason: string | null;
+  recurring_template_id: string | null;
+  is_generated: boolean;
+  // Cached from visits (updated by DB trigger)
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  visit_count: number;
+  completed_visit_count: number;
+  // Legacy columns (kept for migrated data, do not use for new bookings)
+  scheduled_at: string;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  frequency_days: number | null;
+  booking_id: string | null;
+  parent_job_id: string | null;
+  completed_at: string | null;
 };
 
+/* ── Visit ─────────────────────────────────────────────────── */
+export type Visit = {
+  id: string;
+  job_id: string;
+  scheduled_at: string;
+  status: VisitStatus;
+  notes: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/* ── Visit with denormalised job info (from visits_with_job view) ── */
+export type VisitWithJob = Visit & {
+  job_title: string;
+  client_name: string;
+  site_name: string | null;
+  flat_rate: number | null;
+  job_notes: string | null;
+};
+
+/* ── Inputs ────────────────────────────────────────────────── */
 export type JobInput = {
   title: string;
   client_id?: string | null;
   client_name: string;
-  site_name?: string;
+  site_name?: string | null;
+  status?: JobStatus;
+  flat_rate?: number | null;
+  notes?: string | null;
+  job_type?: JobType;
+  recurring_template_id?: string | null;
+  // Legacy fields — kept so AddJobModal and other existing callers don't break
+  scheduled_at?: string;
+  frequency_days?: number | null;
   assigned_to?: string | null;
   assigned_to_name?: string;
-  status: JobStatus;
+};
+
+export type VisitInput = {
+  job_id: string;
   scheduled_at: string;
-  flat_rate?: number | null;
-  notes?: string;
-  job_type?: JobType;
-  frequency_days?: number | null;
-  parent_job_id?: string | null;
+  notes?: string | null;
+  status?: VisitStatus;
 };
 
 /** Human-readable label for a frequency value in days */
 export function frequencyLabel(days: number | null | undefined): string {
   if (!days) return "";
   const map: Record<number, string> = {
-    7: "Weekly",
-    14: "Fortnightly",
-    30: "Monthly",
-    60: "Every 2 months",
-    90: "Quarterly",
+    7:   "Weekly",
+    14:  "Fortnightly",
+    30:  "Monthly",
+    60:  "Every 2 months",
+    90:  "Quarterly",
     180: "Every 6 months",
     365: "Annually",
   };
   return map[days] ?? `Every ${days} days`;
 }
 
+/* ════════════════════════════════════════════════════════════ */
 export function useJobs() {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs]       = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
 
-    // Employees only see jobs assigned to them
     const { data: sessionData } = await supabase.auth.getSession();
     const uid = sessionData.session?.user.id;
 
-    let query = supabase.from("jobs").select("*").order("scheduled_at", { ascending: true });
+    let query = supabase
+      .from("jobs")
+      .select("*")
+      .neq("status", "CANCELLED")
+      .order("scheduled_start", { ascending: true, nullsFirst: false });
 
     if (uid) {
       const { data: prof } = await supabase
@@ -79,20 +123,30 @@ export function useJobs() {
         .single<{ role: string }>();
 
       if (prof?.role === "EMPLOYEE") {
-        // Jobs can be assigned via job_assignments table (new) OR assigned_to column (legacy).
-        // Fetch both sets and union them.
-        const { data: assignmentRows } = await supabase
-          .from("job_assignments")
-          .select("job_id")
+        // Employees see jobs where they have a visit assignment
+        const { data: vaRows } = await supabase
+          .from("visit_assignments")
+          .select("visit_id")
           .eq("employee_id", uid);
 
-        const assignedJobIds = (assignmentRows ?? []).map((r: { job_id: string }) => r.job_id);
+        const visitIds = (vaRows ?? []).map((r: { visit_id: string }) => r.visit_id);
 
-        if (assignedJobIds.length > 0) {
-          // Show jobs from job_assignments + any legacy assigned_to jobs
-          query = query.or(`assigned_to.eq.${uid},id.in.(${assignedJobIds.join(",")})`);
+        if (visitIds.length > 0) {
+          const { data: visitRows } = await supabase
+            .from("visits")
+            .select("job_id")
+            .in("id", visitIds);
+
+          const jobIds = [...new Set((visitRows ?? []).map((r: { job_id: string }) => r.job_id))];
+
+          if (jobIds.length > 0) {
+            query = query.in("id", jobIds);
+          } else {
+            // Legacy fallback: assigned_to column
+            query = query.eq("assigned_to", uid);
+          }
         } else {
-          // Fall back to legacy assigned_to only
+          // Legacy fallback: assigned_to column
           query = query.eq("assigned_to", uid);
         }
       }
@@ -101,179 +155,204 @@ export function useJobs() {
     const { data, error } = await query;
     if (error) {
       toast.error("Failed to load jobs: " + error.message);
-    } else {
-      const jobData = data ?? [];
-
-      // Auto-mark SCHEDULED jobs as OVERDUE if scheduled_at is > 1 hour in the past
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const overdueIds = jobData
-        .filter((j) => j.status === "SCHEDULED" && new Date(j.scheduled_at) < oneHourAgo)
-        .map((j) => j.id);
-
-      if (overdueIds.length > 0) {
-        await supabase.from("jobs").update({ status: "OVERDUE" }).in("id", overdueIds);
-        // Reflect change in local data immediately (no extra fetch needed)
-        jobData.forEach((j) => {
-          if (overdueIds.includes(j.id)) j.status = "OVERDUE";
-        });
-      }
-
-      setJobs(jobData);
+      setLoading(false);
+      return;
     }
+
+    const jobData = (data ?? []) as Job[];
+
+    // Auto-mark SCHEDULED jobs as OVERDUE when their scheduled_start has passed
+    // Rule: job is overdue the moment scheduled_start < now AND it hasn't been started
+    const now = new Date();
+    const overdueJobIds = jobData
+      .filter(j =>
+        j.status === "SCHEDULED" &&
+        j.scheduled_start &&
+        new Date(j.scheduled_start) < now
+      )
+      .map(j => j.id);
+
+    if (overdueJobIds.length > 0) {
+      // Mark jobs overdue
+      await supabase.from("jobs").update({ status: "OVERDUE" }).in("id", overdueJobIds);
+      jobData.forEach(j => { if (overdueJobIds.includes(j.id)) j.status = "OVERDUE"; });
+
+      // Also mark each overdue job's SCHEDULED visits as OVERDUE
+      // (visits whose scheduled_at has passed and are still SCHEDULED)
+      await supabase
+        .from("visits")
+        .update({ status: "OVERDUE" })
+        .in("job_id", overdueJobIds)
+        .eq("status", "SCHEDULED")
+        .lt("scheduled_at", now.toISOString());
+    }
+
+    // Also mark individual SCHEDULED visits as OVERDUE even if the parent job
+    // has multiple visits (some future, some past). We target only past-due visits.
+    const activeJobIds = jobData
+      .filter(j => j.status === "IN_PROGRESS" || j.status === "OVERDUE")
+      .map(j => j.id);
+
+    if (activeJobIds.length > 0) {
+      await supabase
+        .from("visits")
+        .update({ status: "OVERDUE" })
+        .in("job_id", activeJobIds)
+        .eq("status", "SCHEDULED")
+        .lt("scheduled_at", now.toISOString());
+    }
+
+    // ── Un-mark rescheduled items ──────────────────────────────────────
+    // OVERDUE visits whose scheduled_at is now in the future were rescheduled
+    // by an admin. Reset them back to SCHEDULED.
+    await supabase
+      .from("visits")
+      .update({ status: "SCHEDULED" })
+      .eq("status", "OVERDUE")
+      .gte("scheduled_at", now.toISOString());
+
+    // Un-mark OVERDUE jobs whose earliest visit (scheduled_start) is now in
+    // the future — all visits were rescheduled ahead.
+    const jobsToUnmark = jobData
+      .filter(j =>
+        j.status === "OVERDUE" &&
+        j.scheduled_start &&
+        new Date(j.scheduled_start) > now
+      )
+      .map(j => j.id);
+
+    if (jobsToUnmark.length > 0) {
+      await supabase.from("jobs").update({ status: "SCHEDULED" }).in("id", jobsToUnmark);
+      jobData.forEach(j => { if (jobsToUnmark.includes(j.id)) j.status = "SCHEDULED"; });
+    }
+
+    setJobs(jobData);
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchJobs();
-  }, [fetchJobs]);
+  useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
-  const createJob = async (input: JobInput): Promise<boolean> => {
-    const { error } = await supabase.from("jobs").insert(input);
-    if (error) {
-      toast.error(error.message);
-      return false;
-    }
+  /* ── Create a single job (simple / quick-add) ─────────────── */
+  const createJob = async (input: JobInput): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from("jobs")
+      .insert({
+        ...input,
+        status:       input.status ?? "SCHEDULED",
+        assigned_to:  null,
+        assigned_to_name: "",
+        scheduled_at: new Date().toISOString(), // legacy col; visits drive scheduling
+      })
+      .select("id")
+      .single();
+
+    if (error) { toast.error(error.message); return null; }
     toast.success("Job created.");
     await fetchJobs();
-    return true;
+    return (data as { id: string }).id;
   };
 
+  /* ── Update a job ─────────────────────────────────────────── */
   const updateJob = async (id: string, patch: Partial<JobInput>): Promise<boolean> => {
     const { error } = await supabase.from("jobs").update(patch).eq("id", id);
-    if (error) {
-      toast.error(error.message);
-      return false;
-    }
+    if (error) { toast.error(error.message); return false; }
     toast.success("Job updated.");
     await fetchJobs();
     return true;
   };
 
-  const markComplete = async (id: string): Promise<boolean> => {
-    const job = jobs.find((j) => j.id === id);
+  /* ── Admin explicitly closes a job ───────────────────────── */
+  const markJobComplete = async (id: string): Promise<boolean> => {
     const now = new Date().toISOString();
-
-    // Mark the current job complete
     const { error } = await supabase
       .from("jobs")
       .update({ status: "COMPLETED", completed_at: now })
       .eq("id", id);
-
-    if (error) {
-      toast.error(error.message);
-      return false;
-    }
-
-    // Auto-schedule next occurrence for contract jobs
-    if (job?.job_type === "CONTRACT" && job.frequency_days) {
-      const nextDate = new Date(now);
-      nextDate.setDate(nextDate.getDate() + job.frequency_days);
-
-      const nextJob: JobInput = {
-        title: job.title,
-        client_id: job.client_id,
-        client_name: job.client_name,
-        site_name: job.site_name ?? undefined,
-        assigned_to: job.assigned_to,
-        assigned_to_name: job.assigned_to_name ?? undefined,
-        status: "SCHEDULED",
-        scheduled_at: nextDate.toISOString(),
-        flat_rate: job.flat_rate,
-        notes: job.notes ?? undefined,
-        job_type: "CONTRACT",
-        frequency_days: job.frequency_days,
-        parent_job_id: id,
-      };
-
-      const { error: nextErr } = await supabase.from("jobs").insert(nextJob);
-
-      if (nextErr) {
-        toast.error("Completed, but failed to schedule next occurrence: " + nextErr.message);
-      } else {
-        const label = nextDate.toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
-        toast.success(`Job complete! Next occurrence auto-scheduled for ${label}.`, { duration: 5000 });
-      }
-    } else {
-      toast.success("Job marked as complete.");
-    }
-
+    if (error) { toast.error(error.message); return false; }
+    toast.success("Job marked as complete.");
     await fetchJobs();
     return true;
   };
 
+  /* ── Legacy alias kept so existing pages don't break ─────── */
+  const markComplete = markJobComplete;
+
+  /* ── Delete a job (cascades to visits via DB) ─────────────── */
   const deleteJob = async (id: string): Promise<boolean> => {
-    const job = jobs.find((j) => j.id === id);
-    const { data: assignmentRows } = await supabase
-      .from("job_assignments")
-      .select("employee_id")
-      .eq("job_id", id);
+    const job = jobs.find(j => j.id === id);
 
     const { error } = await supabase.from("jobs").delete().eq("id", id);
-    if (error) {
-      toast.error(error.message);
-      return false;
-    }
+    if (error) { toast.error(error.message); return false; }
 
-    // Best-effort cancellation email — only if an email API is configured.
-    // Never block the UI or show an error toast for email failures.
+    // Best-effort cancellation email — only when API is configured
     if (job && import.meta.env.VITE_API_BASE_URL?.trim()) {
       (async () => {
         try {
-          const employeeIds = (assignmentRows ?? []).map((row: { employee_id: string }) => row.employee_id);
+          // Get employees via visit_assignments for this job's visits
+          const { data: visitRows } = await supabase
+            .from("visits")
+            .select("id")
+            .eq("job_id", id);
+
+          const visitIds = (visitRows ?? []).map((v: { id: string }) => v.id);
           let recipients: { email: string; name?: string }[] = [];
 
-          if (employeeIds.length > 0) {
-            const { data: profileRows } = await supabase
-              .from("profiles")
-              .select("email, full_name")
-              .in("id", employeeIds);
+          if (visitIds.length > 0) {
+            const { data: vaRows } = await supabase
+              .from("visit_assignments")
+              .select("employee_id")
+              .in("visit_id", visitIds);
 
-            recipients = (profileRows ?? [])
-              .map((profile: { email: string; full_name: string | null }) => ({
-                email: profile.email,
-                name: profile.full_name ?? undefined,
-              }))
-              .filter((recipient) => recipient.email);
+            const empIds = [...new Set((vaRows ?? []).map((r: { employee_id: string }) => r.employee_id))];
+            if (empIds.length > 0) {
+              const { data: profileRows } = await supabase
+                .from("profiles")
+                .select("email, full_name")
+                .in("id", empIds);
+
+              recipients = (profileRows ?? [])
+                .map((p: { email: string; full_name: string | null }) => ({
+                  email: p.email,
+                  name:  p.full_name ?? undefined,
+                }))
+                .filter(r => r.email);
+            }
           }
 
           await sendJobEmails({
             recipients,
             type: "cancelled",
             job: {
-              title: job.title,
-              clientName: job.client_name,
-              siteName: job.site_name,
-              scheduledAt: job.scheduled_at,
-              status: job.status,
-              notes: job.notes,
+              title:       job.title,
+              clientName:  job.client_name,
+              siteName:    job.site_name,
+              scheduledAt: job.scheduled_start ?? job.scheduled_at,
+              status:      job.status,
+              notes:       job.notes,
             },
           });
-        } catch (emailError) {
-          // Log silently — the deletion already succeeded
-          console.warn("Cancellation email skipped:", emailError);
+        } catch (e) {
+          console.warn("Cancellation email skipped:", e);
         }
       })();
     }
 
     toast.success("Job deleted.");
-    setJobs((prev) => prev.filter((j) => j.id !== id));
+    setJobs(prev => prev.filter(j => j.id !== id));
     return true;
   };
 
-  /** Admin: revert a completed job back to SCHEDULED so employees can resume it */
+  /* ── Revert a completed job to SCHEDULED ─────────────────── */
   const undoComplete = async (id: string): Promise<boolean> => {
     const { error } = await supabase
       .from("jobs")
       .update({ status: "SCHEDULED", completed_at: null })
       .eq("id", id);
-    if (error) {
-      toast.error(error.message);
-      return false;
-    }
-    toast.success("Job re-opened — employees can clock in again.");
+    if (error) { toast.error(error.message); return false; }
+    toast.success("Job re-opened.");
     await fetchJobs();
     return true;
   };
 
-  return { jobs, loading, fetchJobs, createJob, updateJob, markComplete, deleteJob, undoComplete };
+  return { jobs, loading, fetchJobs, createJob, updateJob, markComplete, markJobComplete, deleteJob, undoComplete };
 }

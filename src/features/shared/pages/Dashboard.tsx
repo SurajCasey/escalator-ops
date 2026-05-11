@@ -97,27 +97,30 @@ function startOfWeek(d: Date) {
 
 /* ─── Status maps ────────────────────────────────────────────────── */
 const STATUS_BG: Record<JobStatus, string> = {
-  SCHEDULED:   "bg-blue-50 text-blue-700",
+  SCHEDULED: "bg-blue-50 text-blue-700",
   IN_PROGRESS: "bg-amber-50 text-amber-700",
-  COMPLETED:   "bg-emerald-50 text-emerald-700",
-  OVERDUE:     "bg-rose-50 text-rose-700",
-  CANCELLED:   "bg-slate-100 text-slate-500",
+  COMPLETED: "bg-emerald-50 text-emerald-700",
+  OVERDUE: "bg-rose-50 text-rose-700",
+  CANCELLED: "bg-slate-100 text-slate-500",
+  DRAFT: ""
 };
 
 const STATUS_DOT: Record<JobStatus, string> = {
-  SCHEDULED:   "bg-blue-400",
+  SCHEDULED: "bg-blue-400",
   IN_PROGRESS: "bg-amber-400",
-  COMPLETED:   "bg-emerald-400",
-  OVERDUE:     "bg-rose-500",
-  CANCELLED:   "bg-slate-300",
+  COMPLETED: "bg-emerald-400",
+  OVERDUE: "bg-rose-500",
+  CANCELLED: "bg-slate-300",
+  DRAFT: ""
 };
 
 const STATUS_LEFT: Record<JobStatus, string> = {
-  SCHEDULED:   "border-l-blue-400",
+  SCHEDULED: "border-l-blue-400",
   IN_PROGRESS: "border-l-amber-400",
-  COMPLETED:   "border-l-emerald-400",
-  OVERDUE:     "border-l-rose-500",
-  CANCELLED:   "border-l-slate-200",
+  COMPLETED: "border-l-emerald-400",
+  OVERDUE: "border-l-rose-500",
+  CANCELLED: "border-l-slate-200",
+  DRAFT: ""
 };
 
 /* ─── Sub-components ─────────────────────────────────────────────── */
@@ -203,6 +206,7 @@ export default function Dashboard() {
   const [activeEmployees, setActiveEmployees] = useState(0);
   const [weeklyMinutes, setWeeklyMinutes] = useState(0);
   const [myActiveEntry, setMyActiveEntry] = useState<{ id: string; clock_in: string } | null>(null);
+  const [draftDocuments, setDraftDocuments] = useState(0);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [clockedInCrew, setClockedInCrew] = useState<CrewMember[]>([]);
 
@@ -263,6 +267,13 @@ export default function Dashboard() {
         .is("clock_out", null)
         .maybeSingle();
       if (openEntry) setMyActiveEntry(openEntry as { id: string; clock_in: string });
+
+      const { data: draftDocs } = await supabase
+        .from("report_documents")
+        .select("id", { count: "exact", head: false })
+        .eq("user_id", uid)
+        .eq("status", "DRAFT");
+      setDraftDocuments((draftDocs ?? []).length);
 
       // Low stock items
       const { data: invData } = await supabase
@@ -375,6 +386,23 @@ export default function Dashboard() {
     [weekJobsByDay]
   );
 
+  const employeeWeekRemaining = useMemo(() => {
+    const now = new Date();
+    const weekStart = startOfWeek(new Date());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    return jobs.filter((job) => {
+      const when = new Date(job.scheduled_at);
+      return (
+        when >= now &&
+        when >= weekStart &&
+        when < weekEnd &&
+        job.status !== "COMPLETED" &&
+        job.status !== "CANCELLED"
+      );
+    }).length;
+  }, [jobs]);
+
   // Jobs overdue or running late — needs attention (no cap; grouped by client in render)
   const attentionJobs = useMemo(() => {
     const now = new Date();
@@ -404,6 +432,35 @@ export default function Dashboard() {
     return jobs
       .filter(j => j.job_type === "CONTRACT" && j.status === "SCHEDULED")
       .filter(j => { const t = new Date(j.scheduled_at); return t >= now && t <= in30; })
+      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+      .slice(0, 4);
+  }, [jobs]);
+
+  const nextAssignedJob = useMemo(() => {
+    const now = new Date();
+    return jobs
+      .filter((job) => {
+        const scheduled = new Date(job.scheduled_at);
+        return (
+          scheduled >= now &&
+          job.status !== "COMPLETED" &&
+          job.status !== "CANCELLED"
+        );
+      })
+      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())[0] ?? null;
+  }, [jobs]);
+
+  const employeeUpcomingJobs = useMemo(() => {
+    const now = new Date();
+    return jobs
+      .filter((job) => {
+        const scheduled = new Date(job.scheduled_at);
+        return (
+          scheduled >= now &&
+          job.status !== "COMPLETED" &&
+          job.status !== "CANCELLED"
+        );
+      })
       .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
       .slice(0, 4);
   }, [jobs]);
@@ -501,16 +558,16 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 xl:p-8 space-y-6">
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-blue-900 text-white shadow-xl p-6 md:p-8">
+      <section className="relative overflow-hidden rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-blue-900 text-white shadow-xl p-4 md:p-8">
         <div className="pointer-events-none absolute -top-16 -right-16 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" />
         <div className="pointer-events-none absolute bottom-0 left-28 h-44 w-44 rounded-full bg-indigo-500/15 blur-2xl" />
 
-        <div className="relative flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+        <div className="relative flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
               Statewide Escalator Operations
             </p>
-            <h1 className="text-2xl md:text-3xl font-extrabold mt-2">
+            <h1 className="mt-1.5 text-2xl font-extrabold md:mt-2 md:text-3xl">
               {greeting},{" "}
               <span className="text-blue-300">{name.split(" ")[0]}</span>
             </h1>
@@ -518,7 +575,7 @@ export default function Dashboard() {
               {role === "ADMIN" ? "Admin overview" : "Your operations hub"}
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="mt-3 flex flex-wrap items-center gap-2.5 md:mt-4 md:gap-3">
               {role === "ADMIN" && (
                 <button
                   onClick={() => setAddJobOpen(true)}
@@ -545,17 +602,17 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-4 shrink-0">
+          <div className="flex flex-col items-end gap-2.5 shrink-0 md:gap-4">
             <LiveClock />
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-3 gap-1.5 text-center md:gap-2">
               {[
                 { label: "This Week",    value: jobs.filter(j => { const t = new Date(j.scheduled_at); const ws = startOfWeek(new Date()); const we = new Date(ws); we.setDate(we.getDate() + 7); return t >= ws && t < we && j.status !== "CANCELLED"; }).length },
                 { label: "In Progress",  value: snapshot.inProgress },
                 { label: "Overdue",      value: snapshot.overdueJobs },
               ].map(s => (
-                <div key={s.label} className="rounded-xl bg-white/10 border border-white/15 backdrop-blur-sm px-3 py-2.5">
-                  <p className="text-lg font-bold tabular-nums">{s.value}</p>
-                  <p className="text-[10px] text-slate-300 mt-0.5">{s.label}</p>
+                <div key={s.label} className="rounded-xl bg-white/10 border border-white/15 backdrop-blur-sm px-2.5 py-2 md:px-3 md:py-2.5">
+                  <p className="text-base font-bold tabular-nums md:text-lg">{s.value}</p>
+                  <p className="mt-0.5 text-[10px] text-slate-300">{s.label}</p>
                 </div>
               ))}
             </div>
@@ -610,49 +667,77 @@ export default function Dashboard() {
 
       {/* ── Stat Cards ── */}
       <section className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
-        <StatCard
-          title="This Week"
-          value={weekJobsTotal}
-          subtitle={`${todayJobs.length} today · ${snapshot.inProgress} in progress`}
-          icon={<CalendarDays className="h-5 w-5" />}
-          accent="border-t-blue-500"
-        />
-        <StatCard
-          title="This Month Revenue"
-          value={formatMoney(monthRevenue)}
-          subtitle={`${monthCompletedCount} completed flat-rate jobs`}
-          icon={<DollarSign className="h-5 w-5 text-emerald-600" />}
-          accent="border-t-emerald-500"
-          trend={revenuePct != null ? {
-            delta: revenuePct,
-            label: `${Math.abs(revenuePct)}% vs last month`,
-          } : undefined}
-        />
-        <StatCard
-          title="Completion Rate"
-          value={snapshot.completionRate}
-          suffix="%"
-          subtitle={`${snapshot.completedJobs} of ${snapshot.totalJobs} jobs done`}
-          icon={<CheckCircle2 className="h-5 w-5 text-violet-500" />}
-          accent="border-t-violet-500"
-        />
         {role === "ADMIN" ? (
-          <StatCard
-            title="Active Crew"
-            value={enrichedCrew.length}
-            subtitle={`of ${activeEmployees} employees · ${activeClients} clients`}
-            icon={<UserCheck className="h-5 w-5 text-amber-500" />}
-            accent="border-t-amber-500"
-          />
+          <>
+            <StatCard
+              title="Jobs This Week"
+              value={weekJobsTotal}
+              subtitle={`${todayJobs.length} today · ${snapshot.inProgress} in progress`}
+              icon={<CalendarDays className="h-5 w-5" />}
+              accent="border-t-blue-500"
+            />
+            <StatCard
+              title="This Month Revenue"
+              value={formatMoney(monthRevenue)}
+              subtitle={`${monthCompletedCount} completed flat-rate jobs`}
+              icon={<DollarSign className="h-5 w-5 text-emerald-600" />}
+              accent="border-t-emerald-500"
+              trend={revenuePct != null ? {
+                delta: revenuePct,
+                label: `${Math.abs(revenuePct)}% vs last month`,
+              } : undefined}
+            />
+            <StatCard
+              title="Needs Attention"
+              value={attentionJobs.length}
+              subtitle={`${snapshot.overdueJobs} overdue · ${attentionByClient.length} client groups`}
+              icon={<AlertCircle className="h-5 w-5 text-rose-500" />}
+              accent="border-t-rose-500"
+            />
+            <StatCard
+              title="Active Crew"
+              value={enrichedCrew.length}
+              subtitle={`${activeEmployees} active employees on roster`}
+              icon={<UserCheck className="h-5 w-5 text-amber-500" />}
+              accent="border-t-amber-500"
+            />
+          </>
         ) : (
-          <StatCard
-            title="Hours This Week"
-            value={Math.round((weeklyMinutes / 60) * 10) / 10}
-            suffix="h"
-            subtitle="From your clocked time entries"
-            icon={<Timer className="h-5 w-5 text-amber-500" />}
-            accent="border-t-amber-500"
-          />
+          <>
+            <StatCard
+              title="My Jobs This Week"
+              value={weekJobsTotal}
+              subtitle={`${todayJobs.length} today · ${employeeWeekRemaining} remaining`}
+              icon={<CalendarDays className="h-5 w-5 text-blue-500" />}
+              accent="border-t-blue-500"
+            />
+            <StatCard
+              title="Hours This Week"
+              value={Math.round((weeklyMinutes / 60) * 10) / 10}
+              suffix="h"
+              subtitle="From your clocked time entries"
+              icon={<Timer className="h-5 w-5 text-amber-500" />}
+              accent="border-t-amber-500"
+            />
+            <StatCard
+              title="Next Job"
+              value={nextAssignedJob ? fmtTime(nextAssignedJob.scheduled_at) : "None"}
+              subtitle={
+                nextAssignedJob
+                  ? `${fmtShortDate(nextAssignedJob.scheduled_at)} · ${nextAssignedJob.site_name ?? nextAssignedJob.client_name}`
+                  : "No upcoming assigned job"
+              }
+              icon={<MapPin className="h-5 w-5 text-violet-500" />}
+              accent="border-t-violet-500"
+            />
+            <StatCard
+              title="Pending Submissions"
+              value={draftDocuments}
+              subtitle="Draft reports, pre-starts, and SWMS"
+              icon={<FileText className="h-5 w-5 text-emerald-500" />}
+              accent="border-t-emerald-500"
+            />
+          </>
         )}
       </section>
 
@@ -702,7 +787,7 @@ export default function Dashboard() {
               )}
             </div>
           ) : (
-            <div className="overflow-y-auto max-h-[520px]">
+            <div className="overflow-y-auto max-h-130">
               {weekJobsByDay.map(day => {
                 // Skip empty non-today days
                 if (day.jobs.length === 0 && !day.isToday) return null;
@@ -969,7 +1054,7 @@ export default function Dashboard() {
               <p className="text-xs text-slate-300">No overdue or stalled jobs</p>
             </div>
           ) : (
-            <div className="overflow-y-auto max-h-[420px]">
+            <div className="overflow-y-auto max-h-105">
               {attentionByClient.map(([clientName, clientJobs]) => (
                 <div key={clientName}>
                   {/* Client group header */}
@@ -1040,7 +1125,7 @@ export default function Dashboard() {
 
         {/* Revenue — admin only */}
         {role === "ADMIN" && (
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl shadow-sm p-6">
+          <div className="bg-linear-to-br from-blue-600 to-indigo-700 text-white rounded-2xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-1">
               <p className="text-sm font-medium text-blue-100">Revenue This Month</p>
               <DollarSign className="h-4 w-4 text-blue-300" />
@@ -1089,7 +1174,7 @@ export default function Dashboard() {
       </section>
 
       {/* ── Upcoming Contract Visits ── */}
-      {upcomingContracts.length > 0 && (
+      {role === "ADMIN" && upcomingContracts.length > 0 && (
         <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <div>
@@ -1125,6 +1210,46 @@ export default function Dashboard() {
                 {job.site_name && (
                   <p className="text-xs text-slate-500 truncate mt-0.5">{job.site_name}</p>
                 )}
+                <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+                  <CalendarDays className="h-3 w-3 text-slate-400" />
+                  {fmtShortDate(job.scheduled_at)}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5 ml-4">{fmtTime(job.scheduled_at)}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {role === "EMPLOYEE" && employeeUpcomingJobs.length > 0 && (
+        <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">My Upcoming Jobs</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Your next {employeeUpcomingJobs.length} scheduled job{employeeUpcomingJobs.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <Link
+              to="/schedule"
+              className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
+            >
+              View all <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+            {employeeUpcomingJobs.map((job) => (
+              <div key={job.id} className="px-5 py-4">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                    <CalendarDays className="h-4 w-4 text-blue-500" />
+                  </div>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_BG[job.status]}`}>
+                    {humanize(job.status)}
+                  </span>
+                </div>
+                <p className="text-sm font-semibold text-slate-900 truncate">{job.title}</p>
+                <p className="text-xs text-slate-500 truncate mt-0.5">{job.site_name ?? job.client_name}</p>
                 <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
                   <CalendarDays className="h-3 w-3 text-slate-400" />
                   {fmtShortDate(job.scheduled_at)}

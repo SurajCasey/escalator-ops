@@ -56,11 +56,6 @@ function toDateKey(d: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-function fmtShort(dateStr: string) {
-  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-AU", {
-    weekday: "short", day: "numeric", month: "short",
-  });
-}
 function fmtLong(dateStr: string) {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-AU", {
     weekday: "long", day: "numeric", month: "long",
@@ -373,47 +368,50 @@ export default function BookingModal({ open, onClose, onSaved, defaultDate }: Pr
     setDateOverrides(prev => ({ ...prev, [original]: newDate }));
   };
 
-  /* ── Submit: one job per day (shifts are embedded via shift_number on escalators) ─── */
+  /* ── Submit: 1 parent job + N visits (one per selected date) ─── */
   const handleSubmit = async () => {
     if (!clientId || selectedIds.size === 0 || selectedDates.length === 0) return;
     if (jobType === "CONTRACT" && !frequencyDays) {
       toast.error("Please set a recurrence frequency for this contract job."); return;
     }
     setSaving(true);
-    const bookingId  = crypto.randomUUID();
+
     const clientName = client?.name ?? "";
     const rate       = flatRatePerDay ? parseFloat(flatRatePerDay) : null;
     const totalDays  = selectedDates.length;
 
+    // Job title: client name + site (if different)
+    const jobTitle = siteName && siteName !== clientName
+      ? `${clientName} – ${siteName}`
+      : clientName;
+
     try {
-      for (let dayIdx = 0; dayIdx < selectedDates.length; dayIdx++) {
-        const origDate = selectedDates[dayIdx];
-        const dateStr  = dateOverrides[origDate] ?? origDate;
-        const isoAt    = `${dateStr}T${shiftTime}:00`;
-        const dayLabel = totalDays > 1
-          ? ` – Day ${dayIdx + 1} (${fmtShort(dateStr)})`
-          : ` (${fmtShort(dateStr)})`;
-
-        const { data: jobData, error: jobErr } = await supabase.from("jobs").insert({
-          title:          `${clientName}${dayLabel}`,
-          client_id:      clientId,
-          client_name:    clientName,
-          site_name:      siteName || null,
-          status:         "SCHEDULED",
-          scheduled_at:   new Date(isoAt).toISOString(),
-          flat_rate:      rate,
-          notes:          notes.trim() || null,
-          job_type:       jobType,
-          frequency_days: jobType === "CONTRACT" ? frequencyDays : null,
-          booking_id:     bookingId,
-          assigned_to:    null,
+      // ── 1. Create the single parent job ────────────────────────
+      const firstDate = dateOverrides[selectedDates[0]] ?? selectedDates[0];
+      const { data: jobData, error: jobErr } = await supabase
+        .from("jobs")
+        .insert({
+          title:            jobTitle,
+          client_id:        clientId,
+          client_name:      clientName,
+          site_name:        siteName || null,
+          status:           "SCHEDULED",
+          scheduled_at:     new Date(`${firstDate}T${shiftTime}:00`).toISOString(), // legacy col
+          flat_rate:        rate,
+          notes:            notes.trim() || null,
+          job_type:         jobType,
+          frequency_days:   jobType === "CONTRACT" ? frequencyDays : null,
+          assigned_to:      null,
           assigned_to_name: "",
-        }).select("id").single();
-        if (jobErr) throw jobErr;
-        const jobId = (jobData as { id: string }).id;
+        })
+        .select("id")
+        .single();
+      if (jobErr) throw jobErr;
+      const jobId = (jobData as { id: string }).id;
 
-        /* All escalators go into this one job, tagged with their shift_number */
-        await supabase.from("job_escalators").insert(
+      // ── 2. Create job_escalators (once per parent job) ────────
+      if (selectedAssets.length > 0) {
+        const { error: esErr } = await supabase.from("job_escalators").insert(
           selectedAssets.map((a, i) => ({
             job_id:       jobId,
             unit_number:  a.unit_number,
@@ -422,17 +420,52 @@ export default function BookingModal({ open, onClose, onSaved, defaultDate }: Pr
             shift_number: assetShifts[a.id] ?? 1,
           }))
         );
+        if (esErr) console.warn("job_escalators insert:", esErr.message);
+      }
 
-        if (assignedEmployees.length > 0) {
-          await supabase.from("job_assignments").insert(
-            assignedEmployees.map(emp_id => ({ job_id: jobId, employee_id: emp_id }))
-          );
-        }
+      // ── 3. Create N visits (one per selected date) ────────────
+      const visitRows = selectedDates.map(origDate => {
+        const dateStr = dateOverrides[origDate] ?? origDate;
+        return {
+          job_id:       jobId,
+          scheduled_at: new Date(`${dateStr}T${shiftTime}:00`).toISOString(),
+          status:       "SCHEDULED",
+          notes:        null as string | null,
+        };
+      });
+
+      const { data: visitsData, error: visitsErr } = await supabase
+        .from("visits")
+        .insert(visitRows)
+        .select("id");
+      if (visitsErr) throw visitsErr;
+
+      const visitIds = ((visitsData ?? []) as { id: string }[]).map(v => v.id);
+
+      // ── 4. Create visit_assignments (employees × visits) ──────
+      if (assignedEmployees.length > 0 && visitIds.length > 0) {
+        const assignmentRows = visitIds.flatMap(visitId =>
+          assignedEmployees.map(empId => ({
+            visit_id:    visitId,
+            employee_id: empId,
+          }))
+        );
+        const { error: vaErr } = await supabase
+          .from("visit_assignments")
+          .insert(assignmentRows);
+        if (vaErr) console.warn("visit_assignments insert:", vaErr.message);
+      }
+
+      // ── 5. Legacy job_assignments (backward compat) ────────────
+      if (assignedEmployees.length > 0) {
+        await supabase.from("job_assignments").insert(
+          assignedEmployees.map(emp_id => ({ job_id: jobId, employee_id: emp_id }))
+        );
       }
 
       const msg = totalDays === 1
         ? `Job created${numShifts > 1 ? ` with ${numShifts} shifts` : ""}.`
-        : `${totalDays}-day booking created (${totalDays} jobs${numShifts > 1 ? `, ${numShifts} shifts each` : ""}).`;
+        : `Job created with ${totalDays} visits${numShifts > 1 ? `, ${numShifts} shifts each` : ""}.`;
       toast.success(msg);
       onSaved();
       onClose();
@@ -459,7 +492,7 @@ export default function BookingModal({ open, onClose, onSaved, defaultDate }: Pr
       })()
     : null;
 
-  const totalJobsPreview = selectedDates.length; // 1 job per day regardless of shifts
+  const totalVisitsPreview = selectedDates.length; // now: 1 job with N visits
 
   const isLastStep = step === STEPS.length - 1;
 
@@ -792,8 +825,8 @@ export default function BookingModal({ open, onClose, onSaved, defaultDate }: Pr
                   <>
                     <span className="text-blue-400">·</span>
                     <span className="text-blue-700 font-medium">
-                      {totalJobsPreview} job{totalJobsPreview !== 1 ? "s" : ""} will be created
-                      {numShifts > 1 && `, ${numShifts} shifts each`}
+                      1 job · {totalVisitsPreview} visit{totalVisitsPreview !== 1 ? "s" : ""}
+                      {numShifts > 1 && ` · ${numShifts} shifts each`}
                     </span>
                   </>
                 )}
@@ -904,13 +937,11 @@ export default function BookingModal({ open, onClose, onSaved, defaultDate }: Pr
                 <span className="text-slate-600">{selectedIds.size} units</span>
                 <span className="text-slate-300">·</span>
                 <span className="text-slate-600">
-                  {selectedDates.length} day{selectedDates.length !== 1 ? "s" : ""}
+                  {selectedDates.length} visit{selectedDates.length !== 1 ? "s" : ""}
                   {numShifts > 1 && ` · ${numShifts} shifts each`}
                 </span>
                 <span className="text-slate-300">·</span>
-                <span className="font-medium text-blue-700">
-                  {totalJobsPreview} job{totalJobsPreview !== 1 ? "s" : ""} will be created
-                </span>
+                <span className="font-medium text-blue-700">1 parent job</span>
               </div>
 
               {/* Team */}
@@ -947,16 +978,16 @@ export default function BookingModal({ open, onClose, onSaved, defaultDate }: Pr
               {/* Rate + Notes */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Rate per Day (AUD)</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Flat Rate (AUD)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
                     <input type="number" min={0} step={0.01} value={flatRatePerDay}
                       onChange={e => setFlatRatePerDay(e.target.value)} placeholder="0.00"
                       className="w-full pl-7 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  {flatRatePerDay && selectedDates.length > 1 && (
+                  {flatRatePerDay && (
                     <p className="text-xs text-slate-500 mt-1">
-                      Total: ${(parseFloat(flatRatePerDay) * selectedDates.length).toFixed(2)}
+                      For the whole job · {totalVisitsPreview} visit{totalVisitsPreview !== 1 ? "s" : ""}
                     </p>
                   )}
                 </div>
@@ -1000,10 +1031,10 @@ export default function BookingModal({ open, onClose, onSaved, defaultDate }: Pr
               disabled={saving || !step3Valid}
               className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors">
               {saving ? "Creating…" : jobType === "CONTRACT"
-                ? `Create Contract Job${selectedDates.length > 1 ? "s" : ""}`
-                : totalJobsPreview <= 1
+                ? `Create Contract Job${totalVisitsPreview > 1 ? ` (${totalVisitsPreview} visits)` : ""}`
+                : totalVisitsPreview <= 1
                   ? `Create Job${numShifts > 1 ? ` (${numShifts} shifts)` : ""}`
-                  : `Create ${totalJobsPreview} Jobs${numShifts > 1 ? ` (${numShifts} shifts each)` : ""}`}
+                  : `Create Job (${totalVisitsPreview} visits${numShifts > 1 ? `, ${numShifts} shifts` : ""})`}
             </button>
           )}
         </div>

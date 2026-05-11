@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Building2, Calendar, CheckCircle2,
-  ChevronRight, Clock, Edit2, Eye, FileText, Image,
+  ChevronRight, Clock, Edit2, Eye, FileText,
   MapPin, Package, Phone, Plus, RefreshCw, Trash2, X,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
@@ -54,16 +54,6 @@ type Invoice = {
 
 type Tab = "overview" | "assets" | "jobs" | "invoices";
 
-type AssetPhoto = {
-  id: string;
-  photo_data: string;
-  photo_type: string;
-  caption: string | null;
-  created_at: string;
-  job_title: string;
-  job_date: string;
-};
-
 /* ── Helpers ─────────────────────────────────────────────────── */
 const STATUS_CFG = {
   ACTIVE:   { badge: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
@@ -95,8 +85,8 @@ function humanize(s: string) {
 }
 
 /* ── Asset Form Modal ────────────────────────────────────────── */
-type AssetForm = { unit_number: string; location: string; model: string; serial_number: string; install_date: string; notes: string };
-const emptyForm: AssetForm = { unit_number: "", location: "", model: "", serial_number: "", install_date: "", notes: "" };
+type AssetForm = { unit_number: string; location: string; model: string; serial_number: string; notes: string };
+const emptyForm: AssetForm = { unit_number: "", location: "", model: "", serial_number: "", notes: "" };
 
 function AssetModal({
   clientId, asset, onClose, onSaved,
@@ -111,7 +101,6 @@ function AssetModal({
     location: asset.location ?? "",
     model: asset.model ?? "",
     serial_number: asset.serial_number ?? "",
-    install_date: asset.install_date ?? "",
     notes: asset.notes ?? "",
   } : emptyForm);
   const [saving, setSaving] = useState(false);
@@ -128,7 +117,6 @@ function AssetModal({
       location: form.location || null,
       model: form.model || null,
       serial_number: form.serial_number || null,
-      install_date: form.install_date || null,
       notes: form.notes || null,
     };
     const { error } = asset
@@ -146,7 +134,6 @@ function AssetModal({
     { key: "location",      label: "Location",        placeholder: "e.g. Level 2, North Wing" },
     { key: "model",         label: "Model",           placeholder: "e.g. Otis 508A" },
     { key: "serial_number", label: "Serial Number",   placeholder: "e.g. SN-123456" },
-    { key: "install_date",  label: "Install Date",    type: "date", placeholder: "" },
   ];
 
   return (
@@ -208,72 +195,11 @@ export default function ClientDetail() {
   const [tab, setTab]         = useState<Tab>("overview");
   const [assetModal, setAssetModal] = useState<{ open: boolean; asset: Asset | null }>({ open: false, asset: null });
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
-  const [assetPhotos, setAssetPhotos] = useState<Record<string, AssetPhoto[]>>({});
-  const [loadingAssetPhotos, setLoadingAssetPhotos] = useState<Record<string, boolean>>({});
 
   const fetchClient  = async () => { const { data } = await supabase.from("clients").select("*").eq("id", id).single(); if (data) setClient(data as Client); };
   const fetchAssets  = async () => { const { data } = await supabase.from("client_assets").select("*").eq("client_id", id).order("unit_number"); if (data) setAssets(data as Asset[]); };
   const fetchJobs    = async () => { const { data } = await supabase.from("jobs").select("id, title, status, scheduled_at, assigned_to_name, site_name").eq("client_id", id).order("scheduled_at", { ascending: false }); if (data) setJobs(data as Job[]); };
   const fetchInvoices = async () => { const { data } = await supabase.from("invoices").select("id, invoice_number, amount, status, issued_at, due_at").eq("client_id", id).order("created_at", { ascending: false }); if (data) setInvoices(data as Invoice[]); };
-
-  /* Load photos for a specific escalator unit (lazy, on demand) */
-  const loadAssetPhotos = async (unitNumber: string) => {
-    if (assetPhotos[unitNumber] || loadingAssetPhotos[unitNumber]) return;
-    setLoadingAssetPhotos((p) => ({ ...p, [unitNumber]: true }));
-
-    // Find all job_ids for this client that had this escalator unit
-    const { data: escRows } = await supabase
-      .from("job_escalators")
-      .select("job_id")
-      .eq("unit_number", unitNumber);
-
-    const jobIds = (escRows ?? []).map((r: { job_id: string }) => r.job_id);
-
-    if (jobIds.length === 0) {
-      setAssetPhotos((p) => ({ ...p, [unitNumber]: [] }));
-      setLoadingAssetPhotos((p) => ({ ...p, [unitNumber]: false }));
-      return;
-    }
-
-    // Filter to jobs belonging to this client
-    const { data: clientJobs } = await supabase
-      .from("jobs")
-      .select("id, title, scheduled_at")
-      .eq("client_id", id)
-      .in("id", jobIds);
-
-    const clientJobIds = (clientJobs ?? []).map((j: { id: string }) => j.id);
-    const jobMeta: Record<string, { title: string; scheduled_at: string }> = {};
-    (clientJobs ?? []).forEach((j: { id: string; title: string; scheduled_at: string }) => { jobMeta[j.id] = j; });
-
-    if (clientJobIds.length === 0) {
-      setAssetPhotos((p) => ({ ...p, [unitNumber]: [] }));
-      setLoadingAssetPhotos((p) => ({ ...p, [unitNumber]: false }));
-      return;
-    }
-
-    const { data: photoRows } = await supabase
-      .from("job_photos")
-      .select("id, photo_data, photo_type, caption, created_at, job_id")
-      .in("job_id", clientJobIds)
-      .order("created_at");
-
-    const photos: AssetPhoto[] = (photoRows ?? []).map((p: {
-      id: string; photo_data: string; photo_type: string;
-      caption: string | null; created_at: string; job_id: string;
-    }) => ({
-      id: p.id,
-      photo_data: p.photo_data,
-      photo_type: p.photo_type,
-      caption: p.caption,
-      created_at: p.created_at,
-      job_title: jobMeta[p.job_id]?.title ?? "Unknown job",
-      job_date: jobMeta[p.job_id]?.scheduled_at ?? p.created_at,
-    }));
-
-    setAssetPhotos((prev) => ({ ...prev, [unitNumber]: photos }));
-    setLoadingAssetPhotos((p) => ({ ...p, [unitNumber]: false }));
-  };
 
   useEffect(() => {
     const init = async () => {
@@ -461,105 +387,50 @@ export default function ClientDetail() {
                       <th className="px-5 py-3 text-left">Location</th>
                       <th className="px-5 py-3 text-left hidden sm:table-cell">Model</th>
                       <th className="px-5 py-3 text-left hidden md:table-cell">Serial No.</th>
-                      <th className="px-5 py-3 text-left hidden lg:table-cell">Installed</th>
-                      <th className="px-5 py-3 text-left">Photos</th>
                       <th className="px-5 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {assets.map((asset) => (
-                      <>
-                        <tr key={asset.id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-2.5">
-                              <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                                <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900">{asset.unit_number}</p>
-                                {asset.notes && <p className="text-xs text-slate-400 italic truncate max-w-[120px]">{asset.notes}</p>}
-                              </div>
+                      <tr key={asset.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                              <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
                             </div>
-                          </td>
-                          <td className="px-5 py-3.5 text-sm text-slate-500">
-                            {asset.location
-                              ? <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />{asset.location}</span>
-                              : <span className="text-slate-300">—</span>
-                            }
-                          </td>
-                          <td className="px-5 py-3.5 text-sm text-slate-500 hidden sm:table-cell">{asset.model ?? <span className="text-slate-300">—</span>}</td>
-                          <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">{asset.serial_number ?? <span className="text-slate-300">—</span>}</td>
-                          <td className="px-5 py-3.5 text-sm text-slate-500 hidden lg:table-cell">
-                            {asset.install_date ? fmt(asset.install_date) : <span className="text-slate-300">—</span>}
-                          </td>
-                          <td className="px-5 py-3.5">
-                            {!assetPhotos[asset.unit_number] ? (
-                              <button
-                                onClick={() => loadAssetPhotos(asset.unit_number)}
-                                disabled={loadingAssetPhotos[asset.unit_number]}
-                                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-50 whitespace-nowrap"
-                              >
-                                <Image className="h-3.5 w-3.5 shrink-0" />
-                                {loadingAssetPhotos[asset.unit_number] ? "Loading…" : "Load photos"}
-                              </button>
-                            ) : assetPhotos[asset.unit_number].length === 0 ? (
-                              <span className="text-xs text-slate-400">No photos</span>
-                            ) : (
-                              <span className="text-xs font-medium text-slate-700 flex items-center gap-1">
-                                <Image className="h-3.5 w-3.5 text-slate-400" />
-                                {assetPhotos[asset.unit_number].length} photo{assetPhotos[asset.unit_number].length !== 1 ? "s" : ""}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => setAssetModal({ open: true, asset })}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                                title="Edit"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => deleteAsset(asset.id)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{asset.unit_number}</p>
+                              {asset.notes && <p className="text-xs text-slate-400 italic truncate max-w-[120px]">{asset.notes}</p>}
                             </div>
-                          </td>
-                        </tr>
-
-                        {/* Expanded photo row */}
-                        {assetPhotos[asset.unit_number]?.length > 0 && (
-                          <tr key={`${asset.id}-photos`} className="bg-slate-50/60">
-                            <td colSpan={7} className="px-5 py-3">
-                              <div className="flex gap-2 flex-wrap">
-                                {assetPhotos[asset.unit_number].map((photo) => (
-                                  <div
-                                    key={photo.id}
-                                    className="relative h-16 w-16 rounded-lg overflow-hidden border border-slate-200 group cursor-pointer shrink-0"
-                                    title={`${photo.job_title} · ${fmt(photo.job_date)}`}
-                                  >
-                                    <img
-                                      src={photo.photo_data}
-                                      alt=""
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                    />
-                                    <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors" />
-                                  </div>
-                                ))}
-                                <div className="flex flex-col justify-center ml-1">
-                                  <p className="text-xs text-slate-400">
-                                    From {new Set(assetPhotos[asset.unit_number].map(p => p.job_title)).size} job{new Set(assetPhotos[asset.unit_number].map(p => p.job_title)).size !== 1 ? "s" : ""}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-slate-500">
+                          {asset.location
+                            ? <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />{asset.location}</span>
+                            : <span className="text-slate-300">—</span>
+                          }
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-slate-500 hidden sm:table-cell">{asset.model ?? <span className="text-slate-300">—</span>}</td>
+                        <td className="px-5 py-3.5 text-sm text-slate-500 hidden md:table-cell">{asset.serial_number ?? <span className="text-slate-300">—</span>}</td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => setAssetModal({ open: true, asset })}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => deleteAsset(asset.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>

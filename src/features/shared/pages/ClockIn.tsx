@@ -3,7 +3,7 @@ import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
 import {
   AlertTriangle, ArrowLeft, Briefcase, Check, CheckCircle2,
-  ChevronLeft, ChevronRight, Clock, LogIn, LogOut, MapPin, RefreshCw,
+  ChevronLeft, ChevronRight, Clock, LogIn, LogOut, MapPin, Package, RefreshCw, X,
 } from "lucide-react";
 import JobCompletionModal from "../../jobs/components/JobCompletionModal";
 
@@ -16,21 +16,28 @@ type Escalator = {
   sort_order: number;
 };
 
-type Job = {
-  id: string;
-  title: string;
+/**
+ * A "Visit" enriched with parent-job info (from visits_with_job view),
+ * plus escalators loaded separately.
+ */
+type VisitJob = {
+  id: string;          // visit id
+  job_id: string;
+  title: string;       // job_title from view
   client_name: string;
   site_name: string | null;
-  scheduled_at: string;
-  status: string;
+  scheduled_at: string; // visit's scheduled_at
+  status: string;       // visit status
   flat_rate: number | null;
-  notes: string | null;
+  notes: string | null; // job_notes from view
+  visit_notes: string | null; // visit-level notes
   escalators: Escalator[];
 };
 
 type TimeEntry = {
   id: string;
   job_id: string | null;
+  visit_id: string | null;
   clock_in: string;
   clock_out: string | null;
   duration_minutes: number | null;
@@ -81,6 +88,244 @@ async function getGps(): Promise<{ lat: number; lng: number } | null> {
       { timeout: 8000 }
     );
   });
+}
+
+/* ── Kit types ───────────────────────────────────────────────── */
+type KitItem = {
+  item_id: string;
+  item_name: string;
+  unit: string;
+  quantity: number;
+  current_stock: number;
+  unit_cost: number | null;
+};
+
+type SupplyKit = {
+  id: string;
+  name: string;
+  description: string | null;
+  items: KitItem[];
+};
+
+/* ── UseKitModal ─────────────────────────────────────────────── */
+function UseKitModal({
+  open, jobId, visitId, userId, onClose, onDone,
+}: {
+  open: boolean;
+  jobId: string;
+  visitId: string;
+  userId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [kits,       setKits]       = useState<SupplyKit[]>([]);
+  const [selected,   setSelected]   = useState<string>("");
+  const [loading,    setLoading]    = useState(true);
+  const [applying,   setApplying]   = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelected(""); setLoading(true);
+
+    const fetchKits = async () => {
+      const [kitsRes, itemsRes] = await Promise.all([
+        supabase.from("supply_kits").select("id, name, description").order("name"),
+        supabase.from("supply_kit_items").select("kit_id, item_id, quantity"),
+      ]);
+
+      const kitData  = (kitsRes.data  ?? []) as { id: string; name: string; description: string | null }[];
+      const itemData = (itemsRes.data ?? []) as { kit_id: string; item_id: string; quantity: number }[];
+
+      // Fetch inventory info for all referenced items
+      const itemIds = [...new Set(itemData.map(i => i.item_id))];
+      let invMap: Record<string, { name: string; unit: string; quantity: number; unit_cost: number | null }> = {};
+      if (itemIds.length > 0) {
+        const { data: invData } = await supabase
+          .from("inventory")
+          .select("id, name, unit, quantity, unit_cost")
+          .in("id", itemIds);
+        invMap = Object.fromEntries(
+          ((invData ?? []) as { id: string; name: string; unit: string; quantity: number; unit_cost: number | null }[])
+            .map(i => [i.id, i])
+        );
+      }
+
+      setKits(kitData.map(k => ({
+        ...k,
+        items: itemData
+          .filter(i => i.kit_id === k.id)
+          .map(i => ({
+            item_id:       i.item_id,
+            item_name:     invMap[i.item_id]?.name ?? "Unknown",
+            unit:          invMap[i.item_id]?.unit ?? "",
+            quantity:      i.quantity,
+            current_stock: invMap[i.item_id]?.quantity ?? 0,
+            unit_cost:     invMap[i.item_id]?.unit_cost ?? null,
+          })),
+      })));
+      setLoading(false);
+    };
+    fetchKits();
+  }, [open]);
+
+  if (!open) return null;
+
+  const selectedKit = kits.find(k => k.id === selected);
+
+  // Check if any item is insufficient
+  const shortages = selectedKit?.items.filter(i => i.current_stock < i.quantity) ?? [];
+
+  const handleApply = async () => {
+    if (!selectedKit) return;
+    setApplying(true);
+
+    try {
+      for (const item of selectedKit.items) {
+        // Log usage
+        await supabase.from("inventory_usage").insert({
+          user_id:      userId,
+          job_id:       jobId,
+          item_id:      item.item_id,
+          quantity_used: item.quantity,
+          cost_per_unit: item.unit_cost,
+          notes:        `Applied via kit: ${selectedKit.name}`,
+        });
+
+        const newQty = Math.max(0, item.current_stock - item.quantity);
+
+        // Deduct stock
+        await supabase.from("inventory")
+          .update({ quantity: newQty })
+          .eq("id", item.item_id);
+
+        // Auto purchase request if below min
+        const { data: invRow } = await supabase
+          .from("inventory")
+          .select("min_quantity, supplier_name, supplier_code")
+          .eq("id", item.item_id)
+          .single();
+
+        if (invRow && newQty <= (invRow.min_quantity ?? 0)) {
+          await supabase.from("purchase_requests").insert({
+            requested_by:      userId,
+            item_name:         item.item_name,
+            inventory_item_id: item.item_id,
+            quantity:          (invRow.min_quantity ?? 1) * 2,
+            unit:              item.unit,
+            urgency:           newQty === 0 ? "HIGH" : "MEDIUM",
+            notes:             `Auto-generated: stock dropped to ${newQty} after applying kit "${selectedKit.name}".${
+              invRow.supplier_name ? ` Supplier: ${invRow.supplier_name}` : ""
+            }${invRow.supplier_code ? ` Code: ${invRow.supplier_code}` : ""}`,
+          });
+        }
+      }
+
+      const totalCost = selectedKit.items.reduce(
+        (acc, i) => acc + (i.unit_cost != null ? i.unit_cost * i.quantity : 0), 0
+      );
+      toast.success(
+        `Kit "${selectedKit.name}" applied — ${selectedKit.items.length} items logged.` +
+        (totalCost > 0 ? ` Est. cost: $${totalCost.toFixed(2)}` : "")
+      );
+      onDone(); onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to apply kit.");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-950/50" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Use a Supply Kit</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Log all kit items against this job at once</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {loading ? (
+            <p className="text-sm text-slate-400 text-center py-8">Loading kits…</p>
+          ) : kits.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-8">No supply kits created yet. Ask your admin to set them up.</p>
+          ) : (
+            <>
+              {/* Kit selector */}
+              <div className="space-y-2">
+                {kits.map(kit => (
+                  <button key={kit.id} type="button" onClick={() => setSelected(kit.id)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
+                      selected === kit.id
+                        ? "border-blue-500 bg-blue-50 ring-2 ring-blue-300"
+                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}>
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                        <Package className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{kit.name}</p>
+                        {kit.description && <p className="text-xs text-slate-400">{kit.description}</p>}
+                        <p className="text-xs text-slate-400 mt-0.5">{kit.items.length} item{kit.items.length !== 1 ? "s" : ""}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Selected kit items preview */}
+              {selectedKit && (
+                <div className="rounded-xl bg-slate-50 border border-slate-200 divide-y divide-slate-100">
+                  {selectedKit.items.map(item => {
+                    const insufficient = item.current_stock < item.quantity;
+                    return (
+                      <div key={item.item_id} className="flex items-center justify-between px-4 py-2.5">
+                        <div>
+                          <p className={`text-sm font-medium ${insufficient ? "text-rose-700" : "text-slate-800"}`}>
+                            {item.item_name}
+                          </p>
+                          {insufficient && (
+                            <p className="text-xs text-rose-500">Only {item.current_stock} {item.unit} in stock</p>
+                          )}
+                        </div>
+                        <span className={`text-sm font-semibold ${insufficient ? "text-rose-600" : "text-slate-600"}`}>
+                          {item.quantity} {item.unit}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {shortages.length > 0 && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  Some items have insufficient stock. They'll be logged with available quantity and a restock request will be created automatically.
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1 border-t border-slate-100">
+                <button onClick={onClose}
+                  className="flex-1 py-2.5 text-sm font-medium rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button onClick={handleApply} disabled={!selected || applying}
+                  className="flex-1 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                  {applying ? "Applying…" : "Apply Kit"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ── Status config ───────────────────────────────────────────── */
@@ -162,10 +407,10 @@ function WeekStrip({
 }
 
 /* ── JobCard ─────────────────────────────────────────────────── */
-function JobCard({ job, isActive, onTap }: { job: Job; isActive: boolean; onTap: () => void }) {
-  const cfg      = STATUS_CFG[job.status] ?? STATUS_CFG.SCHEDULED;
-  const escDone  = job.escalators.filter(e => e.completed).length;
-  const escTotal = job.escalators.length;
+function JobCard({ visit, isActive, onTap }: { visit: VisitJob; isActive: boolean; onTap: () => void }) {
+  const cfg      = STATUS_CFG[visit.status] ?? STATUS_CFG.SCHEDULED;
+  const escDone  = visit.escalators.filter(e => e.completed).length;
+  const escTotal = visit.escalators.length;
 
   return (
     <button onClick={onTap}
@@ -174,24 +419,24 @@ function JobCard({ job, isActive, onTap }: { job: Job; isActive: boolean; onTap:
       <div className="p-4 space-y-2">
         {/* Time + status row */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-400">{fmtTime(job.scheduled_at)}</span>
+          <span className="text-xs font-semibold text-slate-400">{fmtTime(visit.scheduled_at)}</span>
           <div className="flex items-center gap-1.5">
             {isActive && <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />}
             <span className={`text-xs font-bold tracking-wide ${cfg.color}`}>{cfg.label}</span>
           </div>
         </div>
 
-        {/* Client name — large, like ShiftCare */}
-        <p className="text-base font-semibold text-slate-900 leading-tight">{job.client_name}</p>
+        {/* Client name */}
+        <p className="text-base font-semibold text-slate-900 leading-tight">{visit.client_name}</p>
 
         {/* Job title */}
-        <p className="text-sm text-slate-500">{job.title}</p>
+        <p className="text-sm text-slate-500">{visit.title}</p>
 
         {/* Address */}
-        {job.site_name && (
+        {visit.site_name && (
           <div className="flex items-start gap-1.5 text-xs text-slate-400">
             <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
-            <span className="leading-snug">{job.site_name}</span>
+            <span className="leading-snug">{visit.site_name}</span>
           </div>
         )}
 
@@ -214,27 +459,34 @@ function JobCard({ job, isActive, onTap }: { job: Job; isActive: boolean; onTap:
 
 /* ── JobDetailView ───────────────────────────────────────────── */
 function JobDetailView({
-  job, userId: _userId, openEntry, busy, locDenied,
+  visit, userId, openEntry, busy, locDenied,
   onBack, onClockIn, onClockOut, onMarkComplete, onToggleEscalator,
 }: {
-  job: Job;
+  visit: VisitJob;
   userId: string;
   openEntry: TimeEntry | null;
   busy: boolean;
   locDenied: boolean;
   onBack: () => void;
-  onClockIn: (job: Job) => void;
-  onClockOut: (job: Job) => void;
-  onMarkComplete: (job: Job) => void;
+  onClockIn: (visit: VisitJob) => void;
+  onClockOut: (visit: VisitJob) => void;
+  onMarkComplete: (visit: VisitJob) => void;
   onToggleEscalator: (jobId: string, escalatorId: string, completed: boolean) => void;
 }) {
-  const jobEntry        = openEntry?.job_id === job.id ? openEntry : null;
-  const isClockedInHere = !!jobEntry;
-  const isOtherActive   = !!openEntry && openEntry.job_id !== job.id;
-  const isCompleted     = job.status === "COMPLETED";
-  const cfg             = STATUS_CFG[job.status] ?? STATUS_CFG.SCHEDULED;
-  const escDone  = job.escalators.filter(e => e.completed).length;
-  const escTotal = job.escalators.length;
+  const [showKitModal, setShowKitModal] = useState(false);
+
+  // Match openEntry by visit_id first, then job_id (legacy fallback)
+  const visitEntry      = openEntry?.visit_id === visit.id
+    ? openEntry
+    : openEntry?.job_id === visit.job_id && !openEntry?.visit_id
+      ? openEntry
+      : null;
+  const isClockedInHere = !!visitEntry;
+  const isOtherActive   = !!openEntry && !visitEntry;
+  const isCompleted     = visit.status === "COMPLETED";
+  const cfg             = STATUS_CFG[visit.status] ?? STATUS_CFG.SCHEDULED;
+  const escDone  = visit.escalators.filter(e => e.completed).length;
+  const escTotal = visit.escalators.length;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -246,8 +498,8 @@ function JobDetailView({
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm truncate">{job.client_name}</p>
-          <p className="text-xs text-slate-400 truncate">{job.title}</p>
+          <p className="font-bold text-sm truncate">{visit.client_name}</p>
+          <p className="text-xs text-slate-400 truncate">{visit.title}</p>
         </div>
         <span className={`text-[11px] font-bold tracking-wide ${cfg.color} bg-white/10 px-2.5 py-1 rounded-full`}>
           {cfg.label}
@@ -265,21 +517,21 @@ function JobDetailView({
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Date & Time</p>
-                <p className="text-sm font-semibold text-slate-900">{fmtFullDate(job.scheduled_at)}</p>
-                <p className="text-xs text-slate-500">{fmtTime(job.scheduled_at)}</p>
+                <p className="text-sm font-semibold text-slate-900">{fmtFullDate(visit.scheduled_at)}</p>
+                <p className="text-xs text-slate-500">{fmtTime(visit.scheduled_at)}</p>
               </div>
             </div>
 
-            {job.site_name && (
+            {visit.site_name && (
               <div className="px-5 py-4 flex items-center gap-4">
                 <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
                   <MapPin className="h-4 w-4 text-slate-500" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Location</p>
-                  <p className="text-sm font-semibold text-slate-900 leading-snug">{job.site_name}</p>
+                  <p className="text-sm font-semibold text-slate-900 leading-snug">{visit.site_name}</p>
                   <a
-                    href={`https://maps.google.com/?q=${encodeURIComponent(job.site_name)}`}
+                    href={`https://maps.google.com/?q=${encodeURIComponent(visit.site_name)}`}
                     target="_blank" rel="noopener noreferrer"
                     className="text-xs text-blue-500 hover:underline"
                     onClick={e => e.stopPropagation()}
@@ -290,14 +542,15 @@ function JobDetailView({
               </div>
             )}
 
-            {job.notes && (
+            {(visit.notes || visit.visit_notes) && (
               <div className="px-5 py-4 flex items-start gap-4">
                 <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
                   <Briefcase className="h-4 w-4 text-slate-500" />
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Instructions</p>
-                  <p className="text-sm text-slate-700 leading-relaxed">{job.notes}</p>
+                  {visit.notes && <p className="text-sm text-slate-700 leading-relaxed">{visit.notes}</p>}
+                  {visit.visit_notes && <p className="text-sm text-slate-600 leading-relaxed mt-1">{visit.visit_notes}</p>}
                 </div>
               </div>
             )}
@@ -309,15 +562,15 @@ function JobDetailView({
 
               {/* Status / timer display */}
               <div className="px-5 pt-5 pb-4">
-                {isClockedInHere && jobEntry ? (
+                {isClockedInHere && visitEntry ? (
                   <div className="text-center text-white">
                     <p className="text-[11px] uppercase tracking-widest text-emerald-200 mb-2">Time Elapsed</p>
-                    <ElapsedTimer since={jobEntry.clock_in} className="text-5xl font-bold" />
+                    <ElapsedTimer since={visitEntry.clock_in} className="text-5xl font-bold" />
                     <p className="text-xs text-emerald-200 mt-2">
-                      Clocked in at {fmtTime(jobEntry.clock_in)}
+                      Clocked in at {fmtTime(visitEntry.clock_in)}
                     </p>
-                    {jobEntry.lat_in && (
-                      <a href={`https://maps.google.com/?q=${jobEntry.lat_in},${jobEntry.lng_in}`}
+                    {visitEntry.lat_in && (
+                      <a href={`https://maps.google.com/?q=${visitEntry.lat_in},${visitEntry.lng_in}`}
                         target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-xs text-emerald-200 hover:text-white mt-1">
                         <MapPin className="h-3 w-3" /> Location recorded
@@ -346,23 +599,21 @@ function JobDetailView({
 
               {/* Action buttons */}
               <div className="px-5 pb-5 space-y-2">
-                {/* Clock In / Clock Out */}
                 {isClockedInHere ? (
-                  <button onClick={() => onClockOut(job)} disabled={busy}
+                  <button onClick={() => onClockOut(visit)} disabled={busy}
                     className="w-full flex items-center justify-center gap-2 bg-white text-emerald-700 font-bold py-4 rounded-2xl hover:bg-emerald-50 disabled:opacity-60 shadow-lg active:scale-95 transition-all">
                     {busy ? <RefreshCw className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
                     {busy ? "Getting location…" : "Clock Out"}
                   </button>
                 ) : (
-                  <button onClick={() => onClockIn(job)} disabled={busy}
+                  <button onClick={() => onClockIn(visit)} disabled={busy}
                     className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 disabled:opacity-60 shadow-lg active:scale-95 transition-all">
                     {busy ? <RefreshCw className="h-5 w-5 animate-spin" /> : <LogIn className="h-5 w-5" />}
                     {busy ? "Getting location…" : "Clock In"}
                   </button>
                 )}
 
-                {/* Mark Job Complete — always visible for non-completed jobs */}
-                <button onClick={() => onMarkComplete(job)} disabled={busy}
+                <button onClick={() => onMarkComplete(visit)} disabled={busy}
                   className={`w-full flex items-center justify-center gap-2 font-semibold py-3.5 rounded-2xl active:scale-95 transition-all disabled:opacity-60 ${
                     isClockedInHere
                       ? "bg-emerald-500 text-white hover:bg-emerald-400"
@@ -405,9 +656,9 @@ function JobDetailView({
                 </div>
               </div>
               <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {job.escalators.map((esc) => (
+                {visit.escalators.map((esc) => (
                   <button key={esc.id} type="button" disabled={isCompleted}
-                    onClick={() => onToggleEscalator(job.id, esc.id, !esc.completed)}
+                    onClick={() => onToggleEscalator(visit.job_id, esc.id, !esc.completed)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
                       isCompleted
                         ? "opacity-60 cursor-not-allowed bg-slate-50 border-slate-100"
@@ -443,15 +694,14 @@ function JobDetailView({
 /* ════════════════════════════════════════════════════════════ */
 export default function ClockIn() {
   const [userId, setUserId]         = useState<string | null>(null);
-  const [jobs, setJobs]             = useState<Job[]>([]);
-  const [_entries, setEntries]      = useState<TimeEntry[]>([]);
+  const [visits, setVisits]         = useState<VisitJob[]>([]);
   const [openEntry, setOpenEntry]   = useState<TimeEntry | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(localIsoDate(new Date()));
   const [weekOffset, setWeekOffset] = useState(0);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [selectedVisit, setSelectedVisit] = useState<VisitJob | null>(null);
   const [loading, setLoading]       = useState(true);
   const [busy, setBusy]             = useState(false);
-  const [completingJob, setCompletingJob] = useState<{ id: string; title: string } | null>(null);
+  const [completingVisit, setCompletingVisit] = useState<{ id: string; visitId: string; title: string } | null>(null);
   const [locDenied, setLocDenied]   = useState(false);
 
   const todayIso = localIsoDate(new Date());
@@ -474,53 +724,63 @@ export default function ClockIn() {
     if (!uid) { setLoading(false); return; }
     setUserId(uid);
 
-    const { data: assignments } = await supabase
-      .from("job_assignments")
-      .select("job_id")
-      .eq("employee_id", uid);
-    const assignedIds = (assignments ?? []).map((a: { job_id: string }) => a.job_id);
-
     const rangeStart = new Date(); rangeStart.setDate(rangeStart.getDate() - 14);
     const rangeEnd   = new Date(); rangeEnd.setDate(rangeEnd.getDate() + 21);
 
-    type RawJob = Omit<Job, "escalators"> & { job_escalators: Escalator[] };
-    const buildJobs = (data: RawJob[]): Job[] =>
-      (data ?? []).map(j => ({
-        id: j.id, title: j.title, client_name: j.client_name,
-        site_name: j.site_name, scheduled_at: j.scheduled_at,
-        status: j.status, flat_rate: j.flat_rate, notes: j.notes,
-        escalators: [...(j.job_escalators ?? [])].sort((a, b) => a.sort_order - b.sort_order),
-      }));
-
-    const allJobsMap = new Map<string, Job>();
-
-    if (assignedIds.length > 0) {
-      const { data } = await supabase
-        .from("jobs")
-        .select("id, title, client_name, site_name, scheduled_at, status, flat_rate, notes, job_escalators(id, unit_number, location, completed, sort_order)")
-        .in("id", assignedIds)
-        .gte("scheduled_at", rangeStart.toISOString())
-        .lte("scheduled_at", rangeEnd.toISOString())
-        .order("scheduled_at");
-      buildJobs((data ?? []) as RawJob[]).forEach(j => allJobsMap.set(j.id, j));
-    }
-
-    // Legacy assigned_to
-    const { data: legacyData } = await supabase
-      .from("jobs")
-      .select("id, title, client_name, site_name, scheduled_at, status, flat_rate, notes, job_escalators(id, unit_number, location, completed, sort_order)")
-      .eq("assigned_to", uid)
+    // Query visits_with_job — RLS filters to visits this employee is assigned to
+    const { data: visitData } = await supabase
+      .from("visits_with_job")
+      .select("*")
+      .neq("status", "CANCELLED")
+      .neq("status", "COMPLETED")
       .gte("scheduled_at", rangeStart.toISOString())
       .lte("scheduled_at", rangeEnd.toISOString())
       .order("scheduled_at");
-    buildJobs((legacyData ?? []) as RawJob[]).forEach(j => allJobsMap.set(j.id, j));
 
-    const sorted = Array.from(allJobsMap.values()).sort((a, b) =>
-      a.scheduled_at.localeCompare(b.scheduled_at)
-    );
-    setJobs(sorted);
+    // Also load escalators for all relevant job_ids
+    type RawVisit = {
+      id: string; job_id: string; scheduled_at: string; status: string;
+      notes: string | null; job_title: string; client_name: string;
+      site_name: string | null; flat_rate: number | null; job_notes: string | null;
+    };
+    const rawVisits = (visitData ?? []) as RawVisit[];
+    const jobIds = [...new Set(rawVisits.map(v => v.job_id))];
 
-    // Time entries
+    let escalatorMap = new Map<string, Escalator[]>();
+    if (jobIds.length > 0) {
+      const { data: escData } = await supabase
+        .from("job_escalators")
+        .select("id, job_id, unit_number, location, completed, sort_order")
+        .in("job_id", jobIds);
+
+      for (const esc of (escData ?? []) as (Escalator & { job_id: string })[]) {
+        const arr = escalatorMap.get(esc.job_id) ?? [];
+        arr.push(esc);
+        escalatorMap.set(esc.job_id, arr);
+      }
+      // Sort each job's escalators
+      escalatorMap.forEach((arr, key) => {
+        escalatorMap.set(key, arr.sort((a, b) => a.sort_order - b.sort_order));
+      });
+    }
+
+    const enriched: VisitJob[] = rawVisits.map(v => ({
+      id: v.id,
+      job_id: v.job_id,
+      title: v.job_title,
+      client_name: v.client_name,
+      site_name: v.site_name,
+      scheduled_at: v.scheduled_at,
+      status: v.status,
+      flat_rate: v.flat_rate,
+      notes: v.job_notes,
+      visit_notes: v.notes,
+      escalators: escalatorMap.get(v.job_id) ?? [],
+    }));
+
+    setVisits(enriched);
+
+    // Time entries (recent, for open-entry detection)
     const { data: entryData } = await supabase
       .from("time_entries")
       .select("*")
@@ -528,39 +788,38 @@ export default function ClockIn() {
       .order("clock_in", { ascending: false })
       .limit(50);
     const rawEntries: TimeEntry[] = entryData ?? [];
-    setEntries(rawEntries);
     setOpenEntry(rawEntries.find(e => !e.clock_out) ?? null);
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  // Keep selectedJob in sync after a reload
+  // Keep selectedVisit in sync after a reload
   useEffect(() => {
-    if (selectedJob) {
-      const updated = jobs.find(j => j.id === selectedJob.id);
-      if (updated) setSelectedJob(updated);
+    if (selectedVisit) {
+      const updated = visits.find(v => v.id === selectedVisit.id);
+      if (updated) setSelectedVisit(updated);
     }
-  }, [jobs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visits]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dayJobs = useMemo(() =>
-    jobs.filter(j => localIsoDate(new Date(j.scheduled_at)) === selectedDate),
-    [jobs, selectedDate]
+  const dayVisits = useMemo(() =>
+    visits.filter(v => localIsoDate(new Date(v.scheduled_at)) === selectedDate),
+    [visits, selectedDate]
   );
 
   const jobDates = useMemo(() => {
     const s = new Set<string>();
-    jobs.forEach(j => s.add(localIsoDate(new Date(j.scheduled_at))));
+    visits.forEach(v => s.add(localIsoDate(new Date(v.scheduled_at))));
     return s;
-  }, [jobs]);
+  }, [visits]);
 
   /* ── Clock in ──────────────────────────────────────────── */
-  const handleClockIn = async (job: Job) => {
+  const handleClockIn = async (visit: VisitJob) => {
     if (!userId) return;
     setBusy(true);
 
     // Auto-clock out of any other open entry first
-    if (openEntry && openEntry.job_id !== job.id) {
+    if (openEntry) {
       const gps = await getGps();
       const patch: Record<string, unknown> = { clock_out: new Date().toISOString() };
       if (gps) { patch.lat_out = gps.lat; patch.lng_out = gps.lng; }
@@ -571,26 +830,40 @@ export default function ClockIn() {
     const gps = await getGps();
     setLocDenied(!gps);
     const payload: Record<string, unknown> = {
-      user_id: userId, job_id: job.id, clock_in: new Date().toISOString(),
+      user_id:  userId,
+      job_id:   visit.job_id,
+      visit_id: visit.id,          // ← record visit_id
+      clock_in: new Date().toISOString(),
     };
     if (gps) { payload.lat_in = gps.lat; payload.lng_in = gps.lng; }
 
     const { error } = await supabase.from("time_entries").insert(payload);
     if (error) { toast.error(error.message); setBusy(false); return; }
 
-    // Move job to IN_PROGRESS if still scheduled
-    if (job.status === "SCHEDULED") {
-      await supabase.from("jobs").update({ status: "IN_PROGRESS" }).eq("id", job.id);
+    // Move visit to IN_PROGRESS when employee clocks in
+    if (visit.status === "SCHEDULED" || visit.status === "OVERDUE") {
+      await supabase.from("visits").update({ status: "IN_PROGRESS" }).eq("id", visit.id);
     }
 
-    toast.success(`Clocked in — ${job.title}`);
+    // Also move the parent job to IN_PROGRESS if it hasn't started yet
+    await supabase
+      .from("jobs")
+      .update({ status: "IN_PROGRESS" })
+      .eq("id", visit.job_id)
+      .in("status", ["SCHEDULED", "OVERDUE", "DRAFT"]);
+
+    toast.success(`Clocked in — ${visit.title}`);
     setBusy(false);
     await load();
   };
 
   /* ── Clock out ─────────────────────────────────────────── */
-  const handleClockOut = async (job: Job) => {
-    const entry = openEntry?.job_id === job.id ? openEntry : null;
+  const handleClockOut = async (visit: VisitJob) => {
+    const entry = openEntry?.visit_id === visit.id
+      ? openEntry
+      : openEntry?.job_id === visit.job_id && !openEntry?.visit_id
+        ? openEntry
+        : null;
     if (!entry) return;
     setBusy(true);
     const gps = await getGps();
@@ -612,7 +885,7 @@ export default function ClockIn() {
       await supabase.from("time_entries").update(patch).eq("id", openEntry.id);
       toast.success("Job complete — automatically clocked out.", { duration: 4000 });
     }
-    setSelectedJob(null);
+    setSelectedVisit(null);
     await load();
   };
 
@@ -623,13 +896,14 @@ export default function ClockIn() {
     else            { patch.completed_at = null; patch.completed_by = null; }
     const { error } = await supabase.from("job_escalators").update(patch).eq("id", escalatorId);
     if (error) { toast.error(error.message); return; }
-    const updateEsc = (prev: Job[]): Job[] =>
-      prev.map(job => job.id !== jobId ? job : {
-        ...job,
-        escalators: job.escalators.map(e => e.id === escalatorId ? { ...e, completed } : e),
+
+    const updateVisits = (prev: VisitJob[]): VisitJob[] =>
+      prev.map(v => v.job_id !== jobId ? v : {
+        ...v,
+        escalators: v.escalators.map(e => e.id === escalatorId ? { ...e, completed } : e),
       });
-    setJobs(updateEsc);
-    setSelectedJob(prev => prev?.id === jobId
+    setVisits(updateVisits);
+    setSelectedVisit(prev => prev?.job_id === jobId
       ? { ...prev, escalators: prev.escalators.map(e => e.id === escalatorId ? { ...e, completed } : e) }
       : prev
     );
@@ -650,26 +924,27 @@ export default function ClockIn() {
   }
 
   /* ── Job detail view ───────────────────────────────────── */
-  if (selectedJob) {
+  if (selectedVisit) {
     return (
       <>
         <JobDetailView
-          job={selectedJob}
+          visit={selectedVisit}
           userId={userId!}
           openEntry={openEntry}
           busy={busy}
           locDenied={locDenied}
-          onBack={() => setSelectedJob(null)}
+          onBack={() => setSelectedVisit(null)}
           onClockIn={handleClockIn}
           onClockOut={handleClockOut}
-          onMarkComplete={(job) => setCompletingJob({ id: job.id, title: job.title })}
+          onMarkComplete={(v) => setCompletingVisit({ id: v.job_id, visitId: v.id, title: v.title })}
           onToggleEscalator={handleToggleEscalator}
         />
-        {completingJob && (
+        {completingVisit && (
           <JobCompletionModal
-            jobId={completingJob.id}
-            jobTitle={completingJob.title}
-            onClose={() => setCompletingJob(null)}
+            jobId={completingVisit.id}
+            visitId={completingVisit.visitId}
+            jobTitle={completingVisit.title}
+            onClose={() => setCompletingVisit(null)}
             onCompleted={handleJobCompleted}
           />
         )}
@@ -700,7 +975,7 @@ export default function ClockIn() {
       <div className="px-4 pt-4 pb-2 flex items-center justify-between">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest">
           {selectedDate === todayIso ? `Today · ${selectedDateFmt}` : selectedDateFmt}
-          {dayJobs.length > 0 && <span className="ml-2 text-slate-400 font-normal">({dayJobs.length} job{dayJobs.length !== 1 ? "s" : ""})</span>}
+          {dayVisits.length > 0 && <span className="ml-2 text-slate-400 font-normal">({dayVisits.length} visit{dayVisits.length !== 1 ? "s" : ""})</span>}
         </h2>
         <div className="flex items-center gap-2">
           {openEntry && (
@@ -717,21 +992,24 @@ export default function ClockIn() {
 
       {/* Job cards */}
       <div className="px-4 pb-8 space-y-3">
-        {dayJobs.length === 0 ? (
+        {dayVisits.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 flex flex-col items-center gap-3 text-slate-400">
             <div className="h-14 w-14 rounded-2xl bg-slate-100 flex items-center justify-center">
               <Briefcase className="h-7 w-7 text-slate-300" />
             </div>
-            <p className="text-sm font-medium text-slate-500">No jobs on this day</p>
+            <p className="text-sm font-medium text-slate-500">No visits on this day</p>
             <p className="text-xs text-slate-400">Use the calendar above to view other days</p>
           </div>
         ) : (
-          dayJobs.map(job => (
+          dayVisits.map(visit => (
             <JobCard
-              key={job.id}
-              job={job}
-              isActive={openEntry?.job_id === job.id}
-              onTap={() => setSelectedJob(job)}
+              key={visit.id}
+              visit={visit}
+              isActive={
+                openEntry?.visit_id === visit.id ||
+                (!openEntry?.visit_id && openEntry?.job_id === visit.job_id)
+              }
+              onTap={() => setSelectedVisit(visit)}
             />
           ))
         )}

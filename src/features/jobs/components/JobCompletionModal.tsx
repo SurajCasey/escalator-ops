@@ -18,6 +18,7 @@ type PhotoEntry = {
 
 type Props = {
   jobId: string;
+  visitId?: string;   // optional: if provided, this specific visit is also marked COMPLETED
   jobTitle: string;
   onClose: () => void;
   onCompleted: () => void;
@@ -154,7 +155,7 @@ function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void
 const STEPS = ["Photos", "Notes", "Sign-off"] as const;
 type Step = 0 | 1 | 2;
 
-export default function JobCompletionModal({ jobId, jobTitle, onClose, onCompleted }: Props) {
+export default function JobCompletionModal({ jobId, visitId, jobTitle, onClose, onCompleted }: Props) {
   const [step, setStep]               = useState<Step>(0);
   const [photos, setPhotos]           = useState<PhotoEntry[]>([]);
   const [notes, setNotes]             = useState("");
@@ -213,12 +214,46 @@ export default function JobCompletionModal({ jobId, jobTitle, onClose, onComplet
         if (photoErr) throw new Error(photoErr.message);
       }
 
-      // 3. Update job status to COMPLETED
-      const { error: jobErr } = await supabase
-        .from("jobs")
-        .update({ status: "COMPLETED", completed_at: new Date().toISOString() })
-        .eq("id", jobId);
-      if (jobErr) throw new Error(jobErr.message);
+      const completedAt = new Date().toISOString();
+
+      // 3. Mark the specific visit as COMPLETED (if visitId supplied)
+      if (visitId) {
+        const { error: visitErr } = await supabase
+          .from("visits")
+          .update({ status: "COMPLETED", completed_at: completedAt })
+          .eq("id", visitId);
+        if (visitErr) throw new Error(visitErr.message);
+
+        // Check if all visits for this job are now completed/cancelled
+        const { data: remainingVisits } = await supabase
+          .from("visits")
+          .select("id, status")
+          .eq("job_id", jobId)
+          .not("status", "in", '("COMPLETED","CANCELLED")');
+
+        // Only mark the whole job COMPLETED if no remaining active visits
+        if (!remainingVisits || remainingVisits.length === 0) {
+          const { error: jobErr } = await supabase
+            .from("jobs")
+            .update({ status: "COMPLETED", completed_at: completedAt })
+            .eq("id", jobId);
+          if (jobErr) throw new Error(jobErr.message);
+        }
+      } else {
+        // No visitId — mark the whole job and all its active visits COMPLETED
+        const { error: jobErr } = await supabase
+          .from("jobs")
+          .update({ status: "COMPLETED", completed_at: completedAt })
+          .eq("id", jobId);
+        if (jobErr) throw new Error(jobErr.message);
+
+        // Also mark all non-cancelled visits complete
+        await supabase
+          .from("visits")
+          .update({ status: "COMPLETED", completed_at: completedAt })
+          .eq("job_id", jobId)
+          .neq("status", "CANCELLED");
+      }
 
       toast.success("Job completed & signed off");
       onCompleted();

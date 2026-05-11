@@ -295,9 +295,9 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
         job: {
           title: payload.title,
           clientName: payload.client_name,
-          siteName: payload.site_name,
-          scheduledAt: payload.scheduled_at,
-          status: payload.status,
+          siteName: payload.site_name ?? null,
+          scheduledAt: payload.scheduled_at ?? new Date().toISOString(),
+          status: payload.status ?? "SCHEDULED",
           notes: payload.notes,
         },
       });
@@ -312,7 +312,7 @@ export default function AddJobModal({ open, onClose, onSaved, editing }: Props) 
   };
 
   const isContract   = form.job_type === "CONTRACT";
-  const nextDue      = isContract ? nextDueLabel(form.scheduled_at, form.frequency_days ?? null) : null;
+  const nextDue      = isContract ? nextDueLabel(form.scheduled_at ?? "", form.frequency_days ?? null) : null;
   const selectedFreq = useCustom ? 0 : (form.frequency_days ?? null);
 
   return (
