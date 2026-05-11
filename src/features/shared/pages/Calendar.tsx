@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, RefreshCw, Users } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, Users } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
-import type { JobStatus, VisitWithJob } from "../../../hooks/Usejobs";
+import type { VisitWithJob } from "../../../hooks/Usejobs";
 import BookingModal from "../../jobs/components/BookingModal";
 
 /* ── Status styles ─────────────────────────────────────────────── */

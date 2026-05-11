@@ -3,7 +3,7 @@ import { supabase } from "../../../lib/supabase";
 import toast from "react-hot-toast";
 import {
   AlertTriangle, ArrowLeft, Briefcase, Check, CheckCircle2,
-  ChevronLeft, ChevronRight, Clock, LogIn, LogOut, MapPin, Package, RefreshCw, X,
+  ChevronLeft, ChevronRight, Clock, LogIn, LogOut, MapPin, RefreshCw,
 } from "lucide-react";
 import JobCompletionModal from "../../jobs/components/JobCompletionModal";
 
@@ -88,244 +88,6 @@ async function getGps(): Promise<{ lat: number; lng: number } | null> {
       { timeout: 8000 }
     );
   });
-}
-
-/* ── Kit types ───────────────────────────────────────────────── */
-type KitItem = {
-  item_id: string;
-  item_name: string;
-  unit: string;
-  quantity: number;
-  current_stock: number;
-  unit_cost: number | null;
-};
-
-type SupplyKit = {
-  id: string;
-  name: string;
-  description: string | null;
-  items: KitItem[];
-};
-
-/* ── UseKitModal ─────────────────────────────────────────────── */
-function UseKitModal({
-  open, jobId, visitId, userId, onClose, onDone,
-}: {
-  open: boolean;
-  jobId: string;
-  visitId: string;
-  userId: string;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [kits,       setKits]       = useState<SupplyKit[]>([]);
-  const [selected,   setSelected]   = useState<string>("");
-  const [loading,    setLoading]    = useState(true);
-  const [applying,   setApplying]   = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setSelected(""); setLoading(true);
-
-    const fetchKits = async () => {
-      const [kitsRes, itemsRes] = await Promise.all([
-        supabase.from("supply_kits").select("id, name, description").order("name"),
-        supabase.from("supply_kit_items").select("kit_id, item_id, quantity"),
-      ]);
-
-      const kitData  = (kitsRes.data  ?? []) as { id: string; name: string; description: string | null }[];
-      const itemData = (itemsRes.data ?? []) as { kit_id: string; item_id: string; quantity: number }[];
-
-      // Fetch inventory info for all referenced items
-      const itemIds = [...new Set(itemData.map(i => i.item_id))];
-      let invMap: Record<string, { name: string; unit: string; quantity: number; unit_cost: number | null }> = {};
-      if (itemIds.length > 0) {
-        const { data: invData } = await supabase
-          .from("inventory")
-          .select("id, name, unit, quantity, unit_cost")
-          .in("id", itemIds);
-        invMap = Object.fromEntries(
-          ((invData ?? []) as { id: string; name: string; unit: string; quantity: number; unit_cost: number | null }[])
-            .map(i => [i.id, i])
-        );
-      }
-
-      setKits(kitData.map(k => ({
-        ...k,
-        items: itemData
-          .filter(i => i.kit_id === k.id)
-          .map(i => ({
-            item_id:       i.item_id,
-            item_name:     invMap[i.item_id]?.name ?? "Unknown",
-            unit:          invMap[i.item_id]?.unit ?? "",
-            quantity:      i.quantity,
-            current_stock: invMap[i.item_id]?.quantity ?? 0,
-            unit_cost:     invMap[i.item_id]?.unit_cost ?? null,
-          })),
-      })));
-      setLoading(false);
-    };
-    fetchKits();
-  }, [open]);
-
-  if (!open) return null;
-
-  const selectedKit = kits.find(k => k.id === selected);
-
-  // Check if any item is insufficient
-  const shortages = selectedKit?.items.filter(i => i.current_stock < i.quantity) ?? [];
-
-  const handleApply = async () => {
-    if (!selectedKit) return;
-    setApplying(true);
-
-    try {
-      for (const item of selectedKit.items) {
-        // Log usage
-        await supabase.from("inventory_usage").insert({
-          user_id:      userId,
-          job_id:       jobId,
-          item_id:      item.item_id,
-          quantity_used: item.quantity,
-          cost_per_unit: item.unit_cost,
-          notes:        `Applied via kit: ${selectedKit.name}`,
-        });
-
-        const newQty = Math.max(0, item.current_stock - item.quantity);
-
-        // Deduct stock
-        await supabase.from("inventory")
-          .update({ quantity: newQty })
-          .eq("id", item.item_id);
-
-        // Auto purchase request if below min
-        const { data: invRow } = await supabase
-          .from("inventory")
-          .select("min_quantity, supplier_name, supplier_code")
-          .eq("id", item.item_id)
-          .single();
-
-        if (invRow && newQty <= (invRow.min_quantity ?? 0)) {
-          await supabase.from("purchase_requests").insert({
-            requested_by:      userId,
-            item_name:         item.item_name,
-            inventory_item_id: item.item_id,
-            quantity:          (invRow.min_quantity ?? 1) * 2,
-            unit:              item.unit,
-            urgency:           newQty === 0 ? "HIGH" : "MEDIUM",
-            notes:             `Auto-generated: stock dropped to ${newQty} after applying kit "${selectedKit.name}".${
-              invRow.supplier_name ? ` Supplier: ${invRow.supplier_name}` : ""
-            }${invRow.supplier_code ? ` Code: ${invRow.supplier_code}` : ""}`,
-          });
-        }
-      }
-
-      const totalCost = selectedKit.items.reduce(
-        (acc, i) => acc + (i.unit_cost != null ? i.unit_cost * i.quantity : 0), 0
-      );
-      toast.success(
-        `Kit "${selectedKit.name}" applied — ${selectedKit.items.length} items logged.` +
-        (totalCost > 0 ? ` Est. cost: $${totalCost.toFixed(2)}` : "")
-      );
-      onDone(); onClose();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to apply kit.");
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-950/50" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white z-10">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">Use a Supply Kit</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Log all kit items against this job at once</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {loading ? (
-            <p className="text-sm text-slate-400 text-center py-8">Loading kits…</p>
-          ) : kits.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">No supply kits created yet. Ask your admin to set them up.</p>
-          ) : (
-            <>
-              {/* Kit selector */}
-              <div className="space-y-2">
-                {kits.map(kit => (
-                  <button key={kit.id} type="button" onClick={() => setSelected(kit.id)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
-                      selected === kit.id
-                        ? "border-blue-500 bg-blue-50 ring-2 ring-blue-300"
-                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                    }`}>
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                        <Package className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-900">{kit.name}</p>
-                        {kit.description && <p className="text-xs text-slate-400">{kit.description}</p>}
-                        <p className="text-xs text-slate-400 mt-0.5">{kit.items.length} item{kit.items.length !== 1 ? "s" : ""}</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {/* Selected kit items preview */}
-              {selectedKit && (
-                <div className="rounded-xl bg-slate-50 border border-slate-200 divide-y divide-slate-100">
-                  {selectedKit.items.map(item => {
-                    const insufficient = item.current_stock < item.quantity;
-                    return (
-                      <div key={item.item_id} className="flex items-center justify-between px-4 py-2.5">
-                        <div>
-                          <p className={`text-sm font-medium ${insufficient ? "text-rose-700" : "text-slate-800"}`}>
-                            {item.item_name}
-                          </p>
-                          {insufficient && (
-                            <p className="text-xs text-rose-500">Only {item.current_stock} {item.unit} in stock</p>
-                          )}
-                        </div>
-                        <span className={`text-sm font-semibold ${insufficient ? "text-rose-600" : "text-slate-600"}`}>
-                          {item.quantity} {item.unit}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {shortages.length > 0 && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
-                  Some items have insufficient stock. They'll be logged with available quantity and a restock request will be created automatically.
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1 border-t border-slate-100">
-                <button onClick={onClose}
-                  className="flex-1 py-2.5 text-sm font-medium rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50">
-                  Cancel
-                </button>
-                <button onClick={handleApply} disabled={!selected || applying}
-                  className="flex-1 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-                  {applying ? "Applying…" : "Apply Kit"}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ── Status config ───────────────────────────────────────────── */
@@ -459,11 +221,10 @@ function JobCard({ visit, isActive, onTap }: { visit: VisitJob; isActive: boolea
 
 /* ── JobDetailView ───────────────────────────────────────────── */
 function JobDetailView({
-  visit, userId, openEntry, busy, locDenied,
+  visit, openEntry, busy, locDenied,
   onBack, onClockIn, onClockOut, onMarkComplete, onToggleEscalator,
 }: {
   visit: VisitJob;
-  userId: string;
   openEntry: TimeEntry | null;
   busy: boolean;
   locDenied: boolean;
@@ -473,8 +234,6 @@ function JobDetailView({
   onMarkComplete: (visit: VisitJob) => void;
   onToggleEscalator: (jobId: string, escalatorId: string, completed: boolean) => void;
 }) {
-  const [showKitModal, setShowKitModal] = useState(false);
-
   // Match openEntry by visit_id first, then job_id (legacy fallback)
   const visitEntry      = openEntry?.visit_id === visit.id
     ? openEntry
@@ -929,7 +688,6 @@ export default function ClockIn() {
       <>
         <JobDetailView
           visit={selectedVisit}
-          userId={userId!}
           openEntry={openEntry}
           busy={busy}
           locDenied={locDenied}
