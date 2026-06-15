@@ -259,7 +259,7 @@ function CoverStep({ formData, onChange }: Props) {
           <Input
             value={formData.preStartSiteLocation}
             onChange={(e) => onChange({ preStartSiteLocation: e.target.value })}
-            placeholder="e.g. Emerald Square"
+            placeholder="Site Location"
           />
         </div>
         <div>

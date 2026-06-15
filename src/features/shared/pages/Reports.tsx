@@ -538,7 +538,7 @@ export default function Reports() {
         {/* ── Table ─────────────────────────────────────────────────────────── */}
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-4 md:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">All Inspections</h2>
                 <p className="mt-1 text-sm text-slate-500">Save manually before submitting. Submit to lock the form.</p>
@@ -581,8 +581,8 @@ export default function Reports() {
             </div>
           </div>
 
-          {/* ── Mobile card list (hidden on md+) ── */}
-          <div className="md:hidden divide-y divide-slate-100">
+          {/* ── Card list (used until the table has enough room) ── */}
+          <div className="lg:hidden divide-y divide-slate-100">
             {filtered.length === 0 && (
               <p className="px-4 py-12 text-center text-sm text-slate-400">No inspections yet.</p>
             )}
@@ -623,8 +623,8 @@ export default function Reports() {
             ))}
           </div>
 
-          {/* ── Desktop table (hidden on mobile) ── */}
-          <div className="hidden md:block overflow-x-auto">
+          {/* ── Wide table ── */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="min-w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
@@ -861,7 +861,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
     return () => { document.body.style.overflow = prev; };
   }, []);
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-2 md:p-4">
+    <div className="fixed inset-0 z-70 flex items-center justify-center p-2 md:p-4">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-slate-950/60" />
       <div ref={ref} className="relative z-10 flex w-full justify-center">
         {children}

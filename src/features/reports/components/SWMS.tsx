@@ -308,7 +308,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
                       value={worker.name}
                       onChange={(e) => updateWorker(index, { name: e.target.value })}
                       placeholder="Full name"
-                      className="w-full min-w-[120px] rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500"
+                      className="w-full min-w-30 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -316,7 +316,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
                       value={worker.classification}
                       onChange={(e) => updateWorker(index, { classification: e.target.value })}
                       placeholder="Operator"
-                      className="w-full min-w-[100px] rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500"
+                      className="w-full min-w-25 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -324,7 +324,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
                       value={worker.employedBy}
                       onChange={(e) => updateWorker(index, { employedBy: e.target.value })}
                       placeholder="SEC"
-                      className="w-full min-w-[80px] rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500"
+                      className="w-full min-w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -332,7 +332,7 @@ export default function SWMS({ formData, onChange, jobId }: Props) {
                       type="date"
                       value={worker.date}
                       onChange={(e) => updateWorker(index, { date: e.target.value })}
-                      className="w-full min-w-[130px] rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500"
+                      className="w-full min-w-32.5 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500"
                     />
                   </td>
                   <td className="px-3 py-2">

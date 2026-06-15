@@ -1,16 +1,3 @@
-/**
- * InspectionForm.tsx
- *
- * Fully dynamic form renderer.  Accepts any TemplateSchema and an AnswerMap,
- * calls onChange on every keystroke / toggle.
- *
- * Supported question types:
- *   text · textarea · number · date · time · datetime
- *   yes_no · checkbox · select · radio · multi_select
- *   photo · signature · worker_table · heading · instruction
- *
- * When stepMode=true, renders one section at a time with Next / Back buttons.
- */
 
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Download, FileCheck2, Loader2, Plus, RotateCcw, SendHorizonal, Trash2 } from "lucide-react";

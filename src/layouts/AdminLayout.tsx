@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
-  Banknote, BarChart3, Building2, CalendarDays, CalendarOff, ChevronDown,
+  Banknote, BarChart3, Bell, Building2, CalendarDays, CalendarOff, ChevronDown,
   FileText, LayoutDashboard, LogOut, Menu, Package,
   Receipt, Settings, ShoppingCart, Timer, Users, X,
 } from "lucide-react";
@@ -44,6 +44,52 @@ const mobileGridClass = ({ isActive }: { isActive: boolean }) =>
       ? "bg-blue-600 text-white"
       : "text-slate-400 hover:bg-white/10 hover:text-white"
   }`;
+
+/* ── Notification Bell ───────────────────────────────────── */
+function NotificationBell() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const fetch = async () => {
+      const today   = new Date().toISOString().split("T")[0];
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const results = await Promise.allSettled([
+        supabase.from("invoices").select("id", { count: "exact", head: true }).neq("status", "PAID").neq("status", "CANCELLED").lt("due_date", today),
+        supabase.from("receipts").select("id", { count: "exact", head: true }).eq("status", "PENDING"),
+        supabase.from("employee_availability").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
+        supabase.from("payroll_runs").select("id", { count: "exact", head: true }).neq("status", "PAID").lt("period_end", today),
+        supabase.from("inventory").select("id", { count: "exact", head: true }).eq("quantity", 0),
+      ]);
+
+      const total = results.reduce((sum, r) => {
+        if (r.status === "fulfilled" && r.value.count != null) return sum + r.value.count;
+        return sum;
+      }, 0);
+
+      setCount(total);
+    };
+    fetch();
+    // Refresh every 2 minutes
+    const interval = setInterval(fetch, 120_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <NavLink
+      to="/admin/dashboard"
+      className="relative p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+      aria-label="Notifications"
+    >
+      <Bell className="h-5 w-5" />
+      {count > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </NavLink>
+  );
+}
 
 /* ── "More" dropdown (desktop) ───────────────────────────── */
 function MoreMenu() {
@@ -158,6 +204,11 @@ export default function AdminLayout() {
             ))}
           </nav>
 
+          {/* Notification bell */}
+          <div className="hidden md:block ml-1">
+            <NotificationBell />
+          </div>
+
           {/* More dropdown — md+ */}
           <div className="hidden md:block ml-1">
             <MoreMenu />
@@ -179,10 +230,10 @@ export default function AdminLayout() {
       {mobileOpen && (
         <>
           <div
-            className="fixed inset-0 z-[35] bg-slate-950/70 backdrop-blur-md md:hidden"
+            className="fixed inset-0 z-35 bg-slate-950/70 backdrop-blur-md md:hidden"
             onClick={closeMobile}
           />
-          <div className="fixed bottom-0 inset-x-0 z-[36] rounded-t-2xl bg-slate-900 border-t border-slate-700/60 shadow-2xl overflow-hidden md:hidden">
+          <div className="fixed bottom-0 inset-x-0 z-36 rounded-t-2xl bg-slate-900 border-t border-slate-700/60 shadow-2xl overflow-hidden md:hidden">
             <div className="p-4 max-h-[75vh] overflow-y-auto">
               {/* Handle bar */}
               <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4" />
@@ -208,7 +259,7 @@ export default function AdminLayout() {
         <button
           type="button"
           onClick={() => setMobileOpen((o) => !o)}
-          className="md:hidden fixed bottom-6 right-6 z-[37] w-14 h-14 rounded-full bg-slate-900 border border-slate-700/60 shadow-2xl text-white flex items-center justify-center transition-all active:scale-95 hover:bg-slate-800"
+          className="md:hidden fixed bottom-6 right-6 z-37 w-14 h-14 rounded-full bg-slate-900 border border-slate-700/60 shadow-2xl text-white flex items-center justify-center transition-all active:scale-95 hover:bg-slate-800"
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
         >
           {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}

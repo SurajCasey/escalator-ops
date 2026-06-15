@@ -181,6 +181,38 @@ export default function JobCompletionModal({ jobId, visitId, jobTitle, onClose, 
   const updatePhoto = (id: string, patch: Partial<PhotoEntry>) =>
     setPhotos((p) => p.map((ph) => (ph.id === id ? { ...ph, ...patch } : ph)));
 
+  const updateVisitCompleted = async (id: string, completedAt: string) => {
+    const primary = await supabase
+      .from("visits")
+      .update({ status: "COMPLETED", completed_at: completedAt })
+      .eq("id", id);
+
+    if (!primary.error) return;
+
+    const fallback = await supabase
+      .from("visits")
+      .update({ status: "COMPLETED" })
+      .eq("id", id);
+
+    if (fallback.error) throw new Error(fallback.error.message);
+  };
+
+  const updateJobCompleted = async (id: string, completedAt: string) => {
+    const primary = await supabase
+      .from("jobs")
+      .update({ status: "COMPLETED", completed_at: completedAt })
+      .eq("id", id);
+
+    if (!primary.error) return;
+
+    const fallback = await supabase
+      .from("jobs")
+      .update({ status: "COMPLETED" })
+      .eq("id", id);
+
+    if (fallback.error) throw new Error(fallback.error.message);
+  };
+
   const handleSubmit = async () => {
     setSaving(true);
     try {
@@ -218,41 +250,39 @@ export default function JobCompletionModal({ jobId, visitId, jobTitle, onClose, 
 
       // 3. Mark the specific visit as COMPLETED (if visitId supplied)
       if (visitId) {
-        const { error: visitErr } = await supabase
-          .from("visits")
-          .update({ status: "COMPLETED", completed_at: completedAt })
-          .eq("id", visitId);
-        if (visitErr) throw new Error(visitErr.message);
+        await updateVisitCompleted(visitId, completedAt);
 
         // Check if all visits for this job are now completed/cancelled
-        const { data: remainingVisits } = await supabase
+        const { data: remainingVisits, error: remainingErr } = await supabase
           .from("visits")
           .select("id, status")
           .eq("job_id", jobId)
-          .not("status", "in", '("COMPLETED","CANCELLED")');
+          .neq("status", "COMPLETED")
+          .neq("status", "CANCELLED");
+        if (remainingErr) throw new Error(remainingErr.message);
 
         // Only mark the whole job COMPLETED if no remaining active visits
         if (!remainingVisits || remainingVisits.length === 0) {
-          const { error: jobErr } = await supabase
-            .from("jobs")
-            .update({ status: "COMPLETED", completed_at: completedAt })
-            .eq("id", jobId);
-          if (jobErr) throw new Error(jobErr.message);
+          await updateJobCompleted(jobId, completedAt);
         }
       } else {
         // No visitId — mark the whole job and all its active visits COMPLETED
-        const { error: jobErr } = await supabase
-          .from("jobs")
-          .update({ status: "COMPLETED", completed_at: completedAt })
-          .eq("id", jobId);
-        if (jobErr) throw new Error(jobErr.message);
+        await updateJobCompleted(jobId, completedAt);
 
         // Also mark all non-cancelled visits complete
-        await supabase
+        const { error: allVisitsErr } = await supabase
           .from("visits")
           .update({ status: "COMPLETED", completed_at: completedAt })
           .eq("job_id", jobId)
           .neq("status", "CANCELLED");
+        if (allVisitsErr) {
+          const fallbackVisits = await supabase
+            .from("visits")
+            .update({ status: "COMPLETED" })
+            .eq("job_id", jobId)
+            .neq("status", "CANCELLED");
+          if (fallbackVisits.error) throw new Error(fallbackVisits.error.message);
+        }
       }
 
       toast.success("Job completed & signed off");

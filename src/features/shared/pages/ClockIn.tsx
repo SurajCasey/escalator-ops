@@ -381,6 +381,7 @@ function JobDetailView({
                   <CheckCircle2 className="h-4 w-4" />
                   Mark Job Complete
                 </button>
+
               </div>
             </div>
           )}

@@ -24,6 +24,7 @@ import Receipts from "./features/receipts/pages/Receipts"
 import PurchaseRequests from "./features/purchases/pages/PurchaseRequests"
 import Payroll from "./features/payroll/pages/Payroll"
 import Availability from "./features/shared/pages/Availability"
+import SupplyKits from "./features/inventory/pages/SupplyKits"
 
 // Note: Clients, ClientDetail, People, Settings remain imported because
 // they are still used in the admin routes below.
@@ -75,6 +76,7 @@ function App() {
               <Route path="/admin/clients" element={<Clients/>}/>
               <Route path="/admin/clients/:id" element={<ClientDetail/>}/>
               <Route path="/admin/inventory" element={<Inventory/>}/>
+              <Route path="/admin/supply-kits" element={<SupplyKits/>}/>
               <Route path="/admin/reports" element={<Reports/>}/>
               <Route path="/admin/timesheet" element={<Timesheet/>}/>
               <Route path="/admin/invoices" element={<Invoices/>}/>

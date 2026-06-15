@@ -130,7 +130,7 @@ const VISIT_STATUSES = ["SCHEDULED","IN_PROGRESS","COMPLETED","OVERDUE","CANCELL
 function Lightbox({ photo, onClose }: { photo: Photo; onClose: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-[60] bg-slate-950/90 flex items-center justify-center p-4"
+      className="fixed inset-0 z-60 bg-slate-950/90 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div className="relative max-w-3xl w-full" onClick={(e) => e.stopPropagation()}>
@@ -607,7 +607,7 @@ export default function JobDetailPanel({
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                                 />
                                 {photo.caption && (
-                                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/80 to-transparent px-2 py-1">
+                                  <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-slate-900/80 to-transparent px-2 py-1">
                                     <p className="text-white text-xs truncate">{photo.caption}</p>
                                   </div>
                                 )}

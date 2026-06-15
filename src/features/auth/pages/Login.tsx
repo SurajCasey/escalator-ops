@@ -171,7 +171,7 @@ export default function Login() {
                                 Don't have an account?{' '}
                                 <a 
                                     href="/signup" 
-                                    className="text-blue-600 font-semibold hover:text-blue-700 hover:underline transition-colors"
+                                    className="text-blue-500 font-semibold hover:text-blue-700 hover:underline transition-colors"
                                 >
                                     Sign up
                                 </a>
